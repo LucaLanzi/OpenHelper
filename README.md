@@ -62,6 +62,8 @@ phone / laptop browser ──► dashboard + engine (Node.js, one per machine)
 - **Packs** (`packs/`): models, languages (checks, language servers, linters), docs, workflows, prompt templates. Add a language or a model by adding a pack.
 - **Workspace** (`workspace/`, never committed): your projects, platform files, links, indexes, evals, adapters, secrets.
 
+Prefer working in VS Code or a terminal agent? Continue and Cline can use your local models and OpenHelper's search and checks as MCP tools: [docs/HARNESS.md](docs/HARNESS.md).
+
 More: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PACKS.md](docs/PACKS.md), [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Security model
