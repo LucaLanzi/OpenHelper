@@ -100,19 +100,29 @@ function vector(text: string, dims = 16): number[] {
 export interface MockLlm {
   server: Server;
   url: string;
-  requests: { path: string; model?: string }[];
+  requests: { path: string; model?: string; max_tokens?: number; thinking?: boolean }[];
+  /** When true, chat requests get their connection dropped, like a model server that died. */
+  dropChats: boolean;
   close: () => Promise<void>;
 }
 
 export function startMockLlm(port = 0): Promise<MockLlm> {
-  const requests: { path: string; model?: string }[] = [];
+  const requests: MockLlm["requests"] = [];
   let loaded: string | undefined;
+  // eslint-disable-next-line prefer-const
+  let self: MockLlm;
   const server = createServer((req, res) => {
     let raw = "";
     req.on("data", (d) => (raw += d));
     req.on("end", () => {
       const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      requests.push({ path: req.url ?? "", ...(typeof body.model === "string" ? { model: body.model } : {}) });
+      const kwargs = body.chat_template_kwargs as { enable_thinking?: boolean } | undefined;
+      requests.push({
+        path: req.url ?? "",
+        ...(typeof body.model === "string" ? { model: body.model } : {}),
+        ...(typeof body.max_tokens === "number" ? { max_tokens: body.max_tokens } : {}),
+        thinking: kwargs?.enable_thinking !== false,
+      });
       const json = (code: number, v: unknown) => {
         res.writeHead(code, { "content-type": "application/json" });
         res.end(JSON.stringify(v));
@@ -129,6 +139,10 @@ export function startMockLlm(port = 0): Promise<MockLlm> {
         return json(200, { data: input.map((t, index) => ({ index, embedding: vector(t) })) });
       }
       if (req.url === "/v1/chat/completions") {
+        if (self.dropChats) {
+          req.socket.destroy();
+          return;
+        }
         loaded = String(body.model);
         const content = reply((body.messages as Msg[]) ?? []);
         if (body.stream) {
@@ -151,12 +165,18 @@ export function startMockLlm(port = 0): Promise<MockLlm> {
     server.listen(port, "127.0.0.1", () => {
       const addr = server.address();
       const p = typeof addr === "object" && addr ? addr.port : port;
-      resolveStart({
+      self = {
         server,
         url: `http://127.0.0.1:${p}`,
         requests,
-        close: () => new Promise((r) => server.close(() => r())),
-      });
+        dropChats: false,
+        close: () =>
+          new Promise((r) => {
+            server.closeAllConnections();
+            server.close(() => r());
+          }),
+      };
+      resolveStart(self);
     });
   });
 }

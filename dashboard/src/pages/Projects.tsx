@@ -8,7 +8,8 @@ interface EvalSummary {
   model: string;
   tasks: number;
   passed: number;
-  errors_per_100: number;
+  errors_per_100: number | null;
+  infra_errors?: number;
   hallucinations_per_100: number;
   green_precision: number | null;
   finished_at: string;
@@ -88,7 +89,9 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
           <tr>
             <th scope="row">Latest score</th>
             <td>
-              {latest
+              {latest && latest.errors_per_100 === null
+                ? `last eval could not score any task (${latest.infra_errors ?? latest.tasks} could not be run)`
+                : latest
                 ? `${latest.errors_per_100} errors per 100 tasks with ${latest.model} (${latest.passed}/${latest.tasks} passed, ${ago(latest.finished_at)})${latest.green_precision !== null ? `; "Checked" was right ${Math.round(latest.green_precision * 100)}% of the time` : ""}`
                 : "no eval run yet"}
             </td>

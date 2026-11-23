@@ -224,6 +224,18 @@ export const WorkspaceConfig = z.object({
   /** llama-swap (or llama-server router) endpoint, localhost only. */
   llm_url: z.string().url().default("http://127.0.0.1:8741"),
   repair_attempts: z.number().int().min(0).max(5).default(2),
+  /** Upper limit on generated tokens per model call (reasoning included). */
+  max_tokens: z.number().int().positive().default(8192),
+  /** Which steps let the model think before answering. Thinking helps planning but costs minutes on a laptop. */
+  reasoning: z
+    .object({
+      plan: z.boolean().default(true),
+      implement: z.boolean().default(true),
+      repair: z.boolean().default(false),
+      review: z.boolean().default(false),
+      explain: z.boolean().default(false),
+    })
+    .default({ plan: true, implement: true, repair: false, review: false, explain: false }),
   retrieval_top_k: z.number().int().min(0).max(40).default(8),
   /** Workflow packs name roles like "@plan" and "@build"; map them to your platforms here. */
   aliases: z.record(z.string(), z.string()).default({}),

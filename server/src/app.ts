@@ -203,7 +203,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     try {
       for await (const d of rt.llm.chatStream({
         model,
-        reasoning: false,
+        reasoning: rt.config.reasoning.explain,
+        max_tokens: rt.config.max_tokens,
         messages: [
           { role: "system", content: "You are OpenHelper, a careful local coding assistant. Never invent APIs. Cite context passages like [S1]." },
           { role: "user", content: prompt },

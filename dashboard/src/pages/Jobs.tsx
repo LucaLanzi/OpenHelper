@@ -212,14 +212,26 @@ export function JobView({ id }: { id: string }) {
         </div>
       )}
       {j.type === "eval" && typeof o.tasks === "number" && (
-        <div className="panel">
-          <p>
-            <strong>
-              {String(o.passed)} of {String(o.tasks)} tasks passed
-            </strong>{" "}
-            with {String(o.model)}: {String(o.errors_per_100)} errors and {String(o.hallucinations_per_100)} invented-API failures per 100 tasks.
-            {o.green_precision !== null && ` When it said "Checked", it was right ${Math.round(Number(o.green_precision) * 100)}% of the time.`}
-          </p>
+        <div className="panel stack-s">
+          {o.errors_per_100 === null ? (
+            <p>
+              <strong>No task could be scored.</strong> Every task hit a problem outside the model's answer; see the log.
+            </p>
+          ) : (
+            <p>
+              <strong>
+                {String(o.passed)} of {String(Number(o.tasks) - Number(o.infra_errors ?? 0))} scored tasks passed
+              </strong>{" "}
+              with {String(o.model)}: {String(o.errors_per_100)} errors and {String(o.hallucinations_per_100)} invented-API failures per 100 tasks.
+              {o.green_precision !== null && ` When it said "Checked", it was right ${Math.round(Number(o.green_precision) * 100)}% of the time.`}
+            </p>
+          )}
+          {Number(o.infra_errors ?? 0) > 0 && (
+            <div className="notice">
+              {String(o.infra_errors)} task{Number(o.infra_errors) === 1 ? "" : "s"} could not be run (for example the model server stopped responding) and
+              {Number(o.infra_errors) === 1 ? " is" : " are"} left out of the score.
+            </div>
+          )}
         </div>
       )}
       {(j.type === "index" || j.type === "mine" || j.type === "docs") && j.status === "done" && (

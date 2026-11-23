@@ -20,6 +20,8 @@ export interface TaskResult {
   hallucinations: string[];
   tokens: number;
   duration_ms: number;
+  /** The run broke for a reason that is not the model's answer (model server down, timeout). Not scored. */
+  infra_error?: string;
 }
 
 export interface EvalSummary {
@@ -28,8 +30,10 @@ export interface EvalSummary {
   platform: string;
   tasks: number;
   passed: number;
-  errors_per_100: number;
-  hallucinations_per_100: number;
+  /** Over scored tasks only; null when every task hit an infrastructure error. */
+  errors_per_100: number | null;
+  hallucinations_per_100: number | null;
+  infra_errors: number;
   green_precision: number | null;
   finished_at: string;
   results: TaskResult[];
@@ -67,6 +71,7 @@ export async function runEval(ctx: AgentContext, tasks: EvalTask[], packs: Langu
     let graded: CheckResult[] = [];
     let confidence = "red";
     let editProblem = false;
+    let infra: string | undefined;
     try {
       await implement(ctx, `## Goal\n${t.message}\n\n## Files to change\n${t.source_files.map((f) => `- \`${f}\``).join("\n")}`, {
         repo: t.repo,
@@ -81,7 +86,8 @@ export async function runEval(ctx: AgentContext, tasks: EvalTask[], packs: Langu
         },
       });
     } catch (e) {
-      ctx.log(`task ${t.id} errored: ${(e as Error).message}`);
+      infra = (e as Error).message;
+      ctx.log(`task ${t.id} could not be run: ${infra}`);
     }
     const verdict = assess(graded);
     const passed = graded.length > 0 && verdict.status !== "red" && graded.some((r) => r.kind === "test" && r.status === "pass");
@@ -99,19 +105,23 @@ export async function runEval(ctx: AgentContext, tasks: EvalTask[], packs: Langu
       hallucinations: hall,
       tokens: ctx.usage.prompt_tokens + ctx.usage.completion_tokens - tokens0,
       duration_ms: Date.now() - t0,
+      ...(infra ? { infra_error: infra } : {}),
     });
-    ctx.log(`task ${t.id}: ${passed ? "PASS" : "FAIL"} (status ${confidence})`);
+    ctx.log(infra ? `task ${t.id}: NOT SCORED (${infra})` : `task ${t.id}: ${passed ? "PASS" : "FAIL"} (status ${confidence})`);
   }
-  const n = results.length || 1;
-  const greens = results.filter((r) => r.confidence === "green");
+  const scored = results.filter((r) => !r.infra_error);
+  const n = scored.length;
+  const per100 = (k: number) => (n ? Math.round((k / n) * 1000) / 10 : null);
+  const greens = scored.filter((r) => r.confidence === "green");
   const summary: EvalSummary = {
     project: ctx.project.name,
     model: ctx.model,
     platform: ctx.platform.name,
     tasks: results.length,
-    passed: results.filter((r) => r.passed).length,
-    errors_per_100: Math.round((results.filter((r) => !r.passed).length / n) * 1000) / 10,
-    hallucinations_per_100: Math.round((results.filter((r) => r.hallucinations.length).length / n) * 1000) / 10,
+    passed: scored.filter((r) => r.passed).length,
+    errors_per_100: per100(scored.filter((r) => !r.passed).length),
+    hallucinations_per_100: per100(scored.filter((r) => r.hallucinations.length).length),
+    infra_errors: results.length - scored.length,
     green_precision: greens.length ? Math.round((greens.filter((r) => r.passed).length / greens.length) * 1000) / 1000 : null,
     finished_at: new Date().toISOString(),
     results,

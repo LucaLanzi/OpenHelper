@@ -202,6 +202,25 @@ describe("evals", () => {
     // Evals leave no branches behind.
     expect(git(repo, "branch", "--list", "openhelper/add-mul*")).toBe("");
     expect(existsSync(join(wsDir, "results", "calc"))).toBe(true);
+    // Plan and implement steps think; every call carries the configured token cap.
+    const chats = mock.requests.filter((r) => r.path === "/v1/chat/completions");
+    expect(chats.length).toBeGreaterThan(0);
+    expect(chats.every((r) => r.max_tokens === 8192)).toBe(true);
+  }, 180_000);
+
+  it("does not score tasks the model server could not answer", async () => {
+    mock.dropChats = true;
+    try {
+      const j = await api<Job>("POST", "/api/jobs", { type: "eval", project: "calc", input: {}, start: true });
+      const done = await until(() => api<Job>("GET", `/api/jobs/${j.id}`), (x) => x.status === "done" || x.status === "failed", 120_000);
+      expect(done.status).toBe("done");
+      const s = done.output as { tasks: number; passed: number; errors_per_100: number | null; infra_errors: number };
+      expect(s).toMatchObject({ tasks: 1, passed: 0, errors_per_100: null, hallucinations_per_100: null, infra_errors: 1 });
+      expect(done.log.join("\n")).toContain("NOT SCORED");
+      expect(git(repo, "branch", "--list", "openhelper/add-mul*")).toBe("");
+    } finally {
+      mock.dropChats = false;
+    }
   }, 180_000);
 });
 

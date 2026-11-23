@@ -17,9 +17,20 @@ llm_url = "http://127.0.0.1:8741"
 repair_attempts = 2
 # Passages retrieved per question. Keep it low on slow prompt processing (the Mac).
 retrieval_top_k = 8
+# Most tokens the model may write in one answer, thinking included.
+max_tokens = 8192
 
 # Workflow packs say "@plan" and "@build"; point them at your platforms.
 # With one machine, point both at it.
 [aliases]
 plan = "desktop"
 build = "desktop"
+
+# Which steps let the model think before it answers. Thinking helps plans and
+# first edits; on a laptop it can add minutes to each call, so it is off elsewhere.
+[reasoning]
+plan = true
+implement = true
+repair = false
+review = false
+explain = false

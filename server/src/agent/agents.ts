@@ -18,7 +18,9 @@ const SYSTEM =
   "You are OpenHelper, a careful local coding assistant. Be correct before being complete. " +
   "Never invent APIs, flags, packages or files. Cite context passages like [S1]. Say 'unverified' when you are not sure.";
 
-async function ask(ctx: AgentContext, user: string, opts: { temperature?: number; reasoning?: boolean; max_tokens?: number } = {}): Promise<string> {
+type Step = "plan" | "implement" | "repair" | "review" | "explain";
+
+async function ask(ctx: AgentContext, step: Step, user: string, opts: { temperature?: number } = {}): Promise<string> {
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM },
     { role: "user", content: user },
@@ -27,13 +29,13 @@ async function ask(ctx: AgentContext, user: string, opts: { temperature?: number
     model: ctx.model,
     messages,
     temperature: opts.temperature ?? 0.2,
-    ...(opts.reasoning !== undefined ? { reasoning: opts.reasoning } : {}),
-    ...(opts.max_tokens ? { max_tokens: opts.max_tokens } : {}),
+    reasoning: ctx.config.reasoning[step],
+    max_tokens: ctx.config.max_tokens,
     signal: ctx.signal,
   });
   ctx.usage.prompt_tokens += r.prompt_tokens;
   ctx.usage.completion_tokens += r.completion_tokens;
-  ctx.log(`model ${ctx.model}: ${r.prompt_tokens} prompt + ${r.completion_tokens} completion tokens in ${r.duration_ms} ms`);
+  ctx.log(`${step}: ${ctx.model}, ${r.prompt_tokens} prompt + ${r.completion_tokens} generated tokens in ${(r.duration_ms / 1000).toFixed(1)} s`);
   return r.content;
 }
 
@@ -53,7 +55,7 @@ export interface ExplainOutput {
 export async function explain(ctx: AgentContext, question: string): Promise<ExplainOutput> {
   const ps = await retrieve(ctx, question);
   const prompt = render(loadTemplate("explain"), { project: ctx.project.name, task: question, context: formatPassages(ps) });
-  const answer = await ask(ctx, prompt, { reasoning: false });
+  const answer = await ask(ctx, "explain", prompt);
   const citations = countValidCitations(answer, ps.length);
   const confidence = assess([], { needsCitations: true, citations: citations.valid });
   if (citations.invalid) confidence.reasons.push(`${citations.invalid} citation(s) point at sources that were not supplied`);
@@ -75,7 +77,7 @@ export interface PlanOutput {
 export async function plan(ctx: AgentContext, task: string): Promise<PlanOutput> {
   const ps = await retrieve(ctx, task, Math.max(ctx.config.retrieval_top_k, 10));
   const prompt = render(loadTemplate("plan"), { project: ctx.project.name, task, context: formatPassages(ps) });
-  const text = await ask(ctx, prompt);
+  const text = await ask(ctx, "plan", prompt);
   const date = new Date().toISOString().slice(0, 10);
   const name = `${date}-${slugify(task)}-${Math.random().toString(36).slice(2, 6)}.md`;
   const file = join(ws.plans(), name);
@@ -187,7 +189,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   const context = [formatFiles(files), formatPassages(ps)].filter(Boolean).join("\n\n");
   const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context });
   const temperature = bestOf > 1 ? 0.2 + 0.25 * (n - 1) : 0.2;
-  let reply = await ask(ctx, prompt, { temperature });
+  let reply = await ask(ctx, "implement", prompt, { temperature });
   const touched = new Set<string>();
   const missed = new Set<string>();
   let editErrors = applyAll(ctx, dir, reply, touched, missed);
@@ -219,7 +221,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
         }
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
-    reply = await ask(ctx, render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
+    reply = await ask(ctx, "repair", render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
     editErrors = applyAll(ctx, dir, reply, touched, missed);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -272,7 +274,7 @@ export async function review(ctx: AgentContext, planText: string, patch: string,
     patch: patch.length > 60_000 ? `${patch.slice(0, 60_000)}\n… (patch truncated)` : patch,
     checks: checks || "(no checks ran)",
   });
-  const text = await ask(ctx, prompt);
+  const text = await ask(ctx, "review", prompt);
   const v = /##\s*Verdict\s*\n+\s*\**\s*(approve|changes needed)/i.exec(text)?.[1]?.toLowerCase();
   return { review: text, verdict: v === "approve" ? "approve" : v === "changes needed" ? "changes needed" : "unclear" };
 }

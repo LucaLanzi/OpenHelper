@@ -11,7 +11,7 @@ import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
 import { canSend, matrix, withinBudget } from "../src/core/links.js";
 import { loadDocPacks, loadLanguages, loadModels, loadWorkflows } from "../src/core/load.js";
 import type { DocPack, HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
-import { Platform as PlatformSchema, SandboxConfig } from "../src/core/schemas.js";
+import { Platform as PlatformSchema, SandboxConfig, WorkspaceConfig } from "../src/core/schemas.js";
 import { scrub, isSecretFile } from "../src/core/scrub.js";
 import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
@@ -279,6 +279,17 @@ describe("audit log", () => {
   });
 });
 
+describe("workspace config", () => {
+  it("defaults to thinking only where it pays and caps answer length", () => {
+    const c = WorkspaceConfig.parse({ self: "mac" });
+    expect(c.max_tokens).toBe(8192);
+    expect(c.reasoning).toEqual({ plan: true, implement: true, repair: false, review: false, explain: false });
+    const d = WorkspaceConfig.parse({ self: "mac", max_tokens: 2048, reasoning: { implement: false } });
+    expect(d.max_tokens).toBe(2048);
+    expect(d.reasoning).toMatchObject({ plan: true, implement: false });
+  });
+});
+
 describe("config staging", () => {
   it("applies with a backup and rolls back when health fails", async () => {
     const dir = tempWorkspace();
@@ -406,7 +417,7 @@ describe("implement", () => {
 
 function implementCtx(repo: string, sandbox: Sandbox, reply: (prompt: string) => string): AgentContext {
   return {
-    config: { retrieval_top_k: 0, repair_attempts: 1 },
+    config: WorkspaceConfig.parse({ self: "mac", retrieval_top_k: 0, repair_attempts: 1 }),
     project: { name: "calc", repos: [repo], languages: ["python"] },
     llm: {
       chat: async (o: { messages: { content: string }[] }) => ({ content: reply(o.messages.at(-1)!.content), prompt_tokens: 0, completion_tokens: 0, duration_ms: 0 }),

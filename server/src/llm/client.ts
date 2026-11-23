@@ -83,7 +83,7 @@ export class LlmClient {
       body: JSON.stringify(body),
       signal: o.signal ?? AbortSignal.timeout(this.timeoutMs),
     }).catch((e: Error) => {
-      throw new LlmError(`model server unreachable at ${this.baseUrl}: ${e.message}`);
+      throw new LlmError(`model server unreachable at ${this.baseUrl}: ${(e.cause as Error | undefined)?.message ?? e.message}`);
     });
     if (!res.ok || !res.body) throw new LlmError(`model server returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
     const decoder = new TextDecoder();
