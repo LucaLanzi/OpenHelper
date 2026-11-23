@@ -130,6 +130,25 @@ describe("workflows", () => {
     expect(done.steps.map((s) => s.status)).toEqual(["done", "done", "done"]);
   }, 180_000);
 
+  it("keeps a run waiting for approval across a restart, and finishes it after", async () => {
+    const run = await api<WorkflowRun>("POST", "/api/workflows/implement-feature/run", { project: "calc", inputs: { task: "Add a subtraction helper" } });
+    const gate = await until(() => api<WorkflowRun>("GET", `/api/runs/${run.id}`), (r) => r.status === "waiting-approval" || r.status === "failed");
+    expect(gate.status).toBe("waiting-approval");
+    // Restart the engine: a fresh app reads the runs back from the workspace.
+    await a.app.close();
+    a = await buildApp();
+    const after = await api<WorkflowRun>("GET", `/api/runs/${run.id}`);
+    expect(after).toMatchObject({ status: "waiting-approval", gate: { step: "plan" } });
+    expect(after.steps.map((s) => s.status)).toEqual(["waiting-approval", "pending", "pending"]);
+    await api("POST", `/api/runs/${run.id}/approve`, {});
+    const review = await until(() => api<WorkflowRun>("GET", `/api/runs/${run.id}`), (r) => (r.status === "waiting-approval" && r.gate?.step === "review") || r.status === "failed", 120_000);
+    expect(review.status).toBe("waiting-approval");
+    expect(review.vars.patch).toContain("def sub(a, b):");
+    expect(review.waited_ms).toBeGreaterThanOrEqual(0);
+    await api("POST", `/api/runs/${run.id}/cancel`, {});
+    expect((await api<WorkflowRun>("GET", `/api/runs/${run.id}`)).status).toBe("canceled");
+  }, 180_000);
+
   it("refuses a cross-platform hand-off when the platforms are isolated", async () => {
     const cfg = readFileSync(join(wsDir, "config.toml"), "utf8").replace(/build = "desktop"/, 'build = "mac"');
     writeFileSync(join(wsDir, "config.toml"), cfg);

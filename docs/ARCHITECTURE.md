@@ -17,7 +17,7 @@
 
 1. You start `implement-feature` with a task. The planner step runs on `@plan` (an alias set in `config.toml`).
 2. The planner retrieves passages from the project's index, writes a plan that cites them, and saves it under `workspace/plans/`.
-3. The run waits for you. You edit the plan if you like and approve it. The approved text replaces the model's plan for every later step.
+3. The run waits for you, for as long as it takes: the wait survives a restart and does not count against the wall-time limit. You edit the plan if you like and approve it. The approved text replaces the model's plan for every later step.
 4. The coder step runs on `@build`. If that is another machine, the link policy decides whether the hand-off is allowed.
 5. The coder makes a worktree on a new branch, asks for search/replace edits, applies them, and runs the language-pack checks in the sandbox. If checks fail, it shows the model the failures and tries again, up to `repair_attempts`. With `best_of` above 1 it makes several candidates and keeps the best.
 6. The reviewer reads the plan, the patch and the check results, and gives a verdict. The run waits for you again.

@@ -38,6 +38,8 @@ export interface WorkflowRun {
   error?: string;
   /** Text waiting for approval; the person may edit it before approving. */
   gate?: { step: string; content: string };
+  /** Time spent waiting for a person; it does not count against the wall-time limit. */
+  waited_ms?: number;
 }
 
 const AGENT_JOB: Record<AgentKind, JobType> = { planner: "plan", coder: "implement", reviewer: "review", explainer: "explain" };
@@ -52,12 +54,39 @@ export class WorkflowEngine {
     for (const f of listFiles(join(ws.root(), "runs"), [".json"])) {
       const r = readJson<WorkflowRun | null>(f, null);
       if (!r) continue;
-      if (r.status === "running" || r.status === "waiting-approval") {
+      this.runs.set(r.id, r);
+      if (r.status === "running") {
+        // The step's job died with the server; there is nothing to pick up.
         r.status = "failed";
         r.error = "server restarted during the run";
+        r.finished_at ??= new Date().toISOString();
+        const cur = r.steps.find((x) => x.status === "running");
+        if (cur) {
+          cur.status = "failed";
+          cur.error = r.error;
+        }
+        this.save(r);
+      } else if (r.status === "waiting-approval") {
+        // Nothing is lost while a run waits for a person, so it keeps waiting.
+        this.resumeWaiting(r);
       }
-      this.runs.set(r.id, r);
     }
+  }
+
+  private resumeWaiting(r: WorkflowRun) {
+    const w = loadWorkflows().find((x) => x.name === r.workflow);
+    const at = r.steps.findIndex((x) => x.status === "waiting-approval");
+    if (!w || at < 0 || w.steps[at]?.id !== r.steps[at]?.id) {
+      r.status = "failed";
+      r.error = w ? "the workflow changed while the run was waiting" : `workflow "${r.workflow}" no longer exists`;
+      r.gate = undefined;
+      r.finished_at ??= new Date().toISOString();
+      this.save(r);
+      return;
+    }
+    const abort = new AbortController();
+    this.aborts.set(r.id, abort);
+    void this.execute(w, r, abort.signal, at);
   }
 
   list(): WorkflowRun[] {
@@ -136,47 +165,31 @@ export class WorkflowEngine {
     return r;
   }
 
-  private async execute(w: WorkflowDef, run: WorkflowRun, signal: AbortSignal): Promise<void> {
-    const deadline = Date.parse(run.started_at) + parseDuration(w.limits.max_wall);
+  /** Runs the steps in order. With `gateAt`, picks up a run that was left waiting at that step's gate. */
+  private async execute(w: WorkflowDef, run: WorkflowRun, signal: AbortSignal, gateAt?: number): Promise<void> {
+    const deadline = () => Date.parse(run.started_at) + (run.waited_ms ?? 0) + parseDuration(w.limits.max_wall);
     // Launching a workflow is a control-plane action, so the first step needs no link.
     // Every later hand-off between platforms is agent-to-agent and must pass the link policy.
-    let prevPlatform = run.steps[0]?.platform ?? this.rt.platform.name;
+    let prevPlatform = (gateAt ? run.steps[gateAt - 1]?.platform : undefined) ?? run.steps[0]?.platform ?? this.rt.platform.name;
     try {
       for (const [i, step] of w.steps.entries()) {
+        if (gateAt !== undefined && i < gateAt) continue;
         if (signal.aborted) return;
         const st = run.steps[i]!;
-        if (Date.now() > deadline) throw new Error(`wall-time limit ${w.limits.max_wall} reached`);
-        if (run.tokens > w.limits.max_tokens) throw new Error(`token limit ${w.limits.max_tokens} reached`);
-
-        // Link policy for the hand-off from the previous platform to this step's platform.
-        const links = loadLinks();
-        const decision = canSend(links, prevPlatform, st.platform);
-        if (st.platform !== prevPlatform) run.hops++;
-        const budget = withinBudget(decision.link, { hops: run.hops, tokens: run.tokens, started_at: Date.parse(run.started_at) });
-        if (!decision.allowed || !budget.allowed) {
-          st.status = "refused";
-          st.error = decision.allowed ? budget.reason : decision.reason;
-          run.status = "refused";
-          run.error = `step "${st.id}" refused: ${st.error}`;
-          audit("workflow", "link.refused", { run: run.id, step: st.id, from: prevPlatform, to: st.platform, reason: st.error });
-          return;
-        }
-        if (st.platform !== prevPlatform) audit("workflow", "link.handoff", { run: run.id, step: st.id, from: prevPlatform, to: st.platform });
-
-        st.status = "running";
-        this.save(run);
-        const job = await this.dispatch(run, step, st, prevPlatform, signal);
-        run.tokens += job.usage.prompt_tokens + job.usage.completion_tokens;
-        if (job.status !== "done") throw new Error(`step "${st.id}" ${job.status}: ${job.error ?? ""}`);
-        this.collect(run, step, st, job);
+        if (i !== gateAt) await this.runStep(run, step, st, prevPlatform, deadline(), w, signal);
+        if (run.status === "refused") return;
 
         if (step.gate === "human-approve") {
-          st.status = "waiting-approval";
-          run.status = "waiting-approval";
-          run.gate = { step: st.id, content: gateContent(step.agent, run, st.id) };
-          this.save(run);
+          if (i !== gateAt) {
+            st.status = "waiting-approval";
+            run.status = "waiting-approval";
+            run.gate = { step: st.id, content: gateContent(step.agent, run, st.id) };
+            this.save(run);
+          }
+          const waitStart = Date.now();
           const decisionGate = await new Promise<{ approved: boolean; content?: string }>((res) => this.resumes.set(run.id, res));
           this.resumes.delete(run.id);
+          run.waited_ms = (run.waited_ms ?? 0) + (Date.now() - waitStart);
           if (signal.aborted) return;
           if (!decisionGate.approved) {
             st.status = "failed";
@@ -214,6 +227,33 @@ export class WorkflowEngine {
       this.save(run);
       audit("workflow", `workflow.${run.status}`, { run: run.id, tokens: run.tokens, hops: run.hops });
     }
+  }
+
+  /** Checks limits and the link policy, then runs one step's job and collects its output. */
+  private async runStep(run: WorkflowRun, step: WorkflowStep, st: StepState, prevPlatform: string, deadline: number, w: WorkflowDef, signal: AbortSignal) {
+    if (Date.now() > deadline) throw new Error(`wall-time limit ${w.limits.max_wall} reached`);
+    if (run.tokens > w.limits.max_tokens) throw new Error(`token limit ${w.limits.max_tokens} reached`);
+    // Link policy for the hand-off from the previous platform to this step's platform.
+    const links = loadLinks();
+    const decision = canSend(links, prevPlatform, st.platform);
+    if (st.platform !== prevPlatform) run.hops++;
+    const budget = withinBudget(decision.link, { hops: run.hops, tokens: run.tokens, started_at: Date.parse(run.started_at) + (run.waited_ms ?? 0) });
+    if (!decision.allowed || !budget.allowed) {
+      st.status = "refused";
+      st.error = decision.allowed ? budget.reason : decision.reason;
+      run.status = "refused";
+      run.error = `step "${st.id}" refused: ${st.error}`;
+      audit("workflow", "link.refused", { run: run.id, step: st.id, from: prevPlatform, to: st.platform, reason: st.error });
+      return;
+    }
+    if (st.platform !== prevPlatform) audit("workflow", "link.handoff", { run: run.id, step: st.id, from: prevPlatform, to: st.platform });
+
+    st.status = "running";
+    this.save(run);
+    const job = await this.dispatch(run, step, st, prevPlatform, signal);
+    run.tokens += job.usage.prompt_tokens + job.usage.completion_tokens;
+    if (job.status !== "done") throw new Error(`step "${st.id}" ${job.status}: ${job.error ?? ""}`);
+    this.collect(run, step, st, job);
   }
 
   private async dispatch(run: WorkflowRun, step: WorkflowStep, st: StepState, from: string, signal: AbortSignal): Promise<Job> {
