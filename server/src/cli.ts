@@ -24,7 +24,7 @@ import { serveStdio } from "./mcp.js";
 import { llamaSwapConfig, modelFile } from "./swapconfig.js";
 import { stringify as toYaml } from "yaml";
 
-const VERSION = "0.1.0";
+const VERSION = "0.0.1";
 
 type Args = { _: string[]; [k: string]: string | boolean | string[] };
 

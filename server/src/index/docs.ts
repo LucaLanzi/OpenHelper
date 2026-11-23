@@ -18,7 +18,7 @@ type Lock = Record<string, { url: string; sha256: string; fetched_at: string }>;
 
 const lockFile = () => join(ws.docs(), "lock.json");
 /** Some sites (gnu.org) refuse requests without a User-Agent they recognise; say who we are. */
-export const DOC_FETCH_USER_AGENT = "OpenHelper/0.1 (+https://github.com/LucaLanzi/OpenHelper; doc-pack fetch)";
+export const DOC_FETCH_USER_AGENT = "OpenHelper/0.0.1 (+https://github.com/LucaLanzi/OpenHelper; doc-pack fetch)";
 
 export function docTextDir(pack: string): string {
   return join(ws.docs(), pack, "text");

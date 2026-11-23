@@ -33,7 +33,7 @@ import { makeSandbox } from "./sandbox/sandbox.js";
 import { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.0.1";
 const JOB_TYPES: JobType[] = ["explain", "plan", "implement", "review", "check", "index", "docs", "eval", "mine"];
 
 class HttpError extends Error {
