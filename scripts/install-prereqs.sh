@@ -239,7 +239,7 @@ linux() {
 
     b "4/5 Tools the checks use"
     apt_install "check tools" python3 python3-venv python3-pytest pipx shellcheck cppcheck clang-tidy bats
-    have pipx && pipx ensurepath >/dev/null 2>&1 || true
+    if have pipx; then pipx ensurepath >/dev/null 2>&1 || true; fi
     pipx_tool ruff ruff
     pipx_tool mypy mypy
     pipx_tool cmake-lint cmakelang

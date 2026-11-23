@@ -75,16 +75,24 @@ macos() {
     fi
 
     b "2/4 containerd inside the VM"
-    limactl shell "$VM" -- nerdctl info >/dev/null 2>&1 || die "nerdctl is not working inside the VM; recreate it with: limactl delete -f $VM && make sandbox-vm"
-    ok "nerdctl works"
+    # Lima's default VM runs containerd rootless (plain nerdctl); a VM set up with system
+    # containerd needs sudo. The engine detects the same way.
+    if limactl shell "$VM" -- nerdctl info >/dev/null 2>&1; then
+        nerdctl=(nerdctl)
+    elif limactl shell "$VM" -- sudo nerdctl info >/dev/null 2>&1; then
+        nerdctl=(sudo nerdctl)
+    else
+        die "nerdctl is not working inside the VM; recreate it with: limactl delete -f $VM && make sandbox-vm"
+    fi
+    ok "${nerdctl[*]} works"
 
     b "3/4 Sandbox image"
     # The repo is under your home folder, which Lima mounts at the same path.
-    limactl shell "$VM" -- nerdctl build -t "$IMAGE" "$OH_ROOT/sandbox"
+    limactl shell "$VM" -- "${nerdctl[@]}" build -t "$IMAGE" "$OH_ROOT/sandbox"
     ok "built $IMAGE"
 
     b "4/4 Smoke test (network off)"
-    out="$(smoke limactl shell "$VM" -- nerdctl)"
+    out="$(smoke limactl shell "$VM" -- "${nerdctl[@]}")"
     printf '%s\n' "$out" | sed 's/^/  /'
     printf '%s' "$out" | grep -q "NETWORK REACHABLE" && die "the sandbox can reach the network; not using it"
     ok "sandbox works with the network off"

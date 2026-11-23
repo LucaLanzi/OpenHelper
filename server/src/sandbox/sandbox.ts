@@ -108,19 +108,30 @@ class ContainerSandbox implements Sandbox {
 }
 
 /**
- * macOS: a Lima VM running rootless containerd (Lima's default template). The worktree must be
- * under a writable Lima mount: `make sandbox-vm` mounts your home folder writable.
+ * macOS: a Lima VM with containerd. `make sandbox-vm` creates Lima's default VM, whose containerd
+ * runs rootless (plain `nerdctl`); a VM set up with system containerd needs `sudo nerdctl`.
+ * Which one this VM has is detected once. The worktree must be under a writable Lima mount.
  */
 class LimaSandbox implements Sandbox {
   driver = "lima" as const;
+  private nerdctl?: Promise<string[]>;
   constructor(
     private vm: string,
     private image: string,
   ) {}
-  run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
-    const args = ["shell", this.vm, "--", "nerdctl", "run", "--rm", "--network", "none", "-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`];
+
+  private detect(): Promise<string[]> {
+    this.nerdctl ??= exec("limactl", ["shell", this.vm, "--", "nerdctl", "info"], process.cwd(), baseEnv({}), 60_000).then((r) =>
+      r.code === 0 ? ["nerdctl"] : ["sudo", "nerdctl"],
+    );
+    return this.nerdctl;
+  }
+
+  async run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
+    const nerdctl = await this.detect();
+    const args = ["shell", this.vm, "--", ...nerdctl, "run", "--rm", "--network", "none", "-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`];
     for (const p of o.readOnly ?? []) args.push("-v", `${p}:${p}:ro`);
-    args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", this.image, "sh", "-c", cmd);
+    args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", this.image, "sh", "-c", cmd);
     return exec("limactl", args, cwd, baseEnv({}), o.timeoutMs);
   }
 }

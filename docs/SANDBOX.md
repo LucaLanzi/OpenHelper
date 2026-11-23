@@ -39,7 +39,7 @@ limactl start openhelper
 limactl shell openhelper -- nerdctl build -t openhelper-sandbox:latest "$PWD/sandbox"
 ```
 
-Lima's default template runs containerd rootless, so `nerdctl` runs without `sudo`.
+Lima's default template runs containerd rootless, so `nerdctl` runs without `sudo`. A VM created with system containerd instead (`--set '.containerd.system = true | .containerd.user = false'`) also works: OpenHelper detects which one the VM has and uses `sudo nerdctl` there.
 
 The worktrees live under `workspace/worktrees/`, which must be inside a writable Lima mount (your home folder is, with `--mount-writable`). Then:
 
