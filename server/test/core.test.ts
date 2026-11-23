@@ -553,6 +553,22 @@ describe("evals", () => {
     const blocks = parseEditBlocks("calc/ops.py\n<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nc\n=======\nd\n>>>>>>> REPLACE\n");
     expect(blocks.map((b) => b.path)).toEqual(["calc/ops.py", "calc/ops.py"]);
   });
+  it("shows the plan's real path in the edit format, not a placeholder", async () => {
+    tempWorkspace();
+    const repo = samplePythonRepo();
+    const sandbox: Sandbox = {
+      driver: "none",
+      run: async (cmd) => ({ code: 0, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
+    };
+    const prompts: string[] = [];
+    const reply = (p: string) => {
+      prompts.push(p);
+      return "calc/ops.py\n<<<<<<< SEARCH\ndef add(a, b):\n=======\ndef add(a, b):  # edited\n>>>>>>> REPLACE\n";
+    };
+    await implement(implementCtx(repo, sandbox, reply), "Edit add\n\n## Files to change\n- **calc/ops.py**: edit", { discardBranches: true });
+    expect(prompts[0]).toContain("on its own line:\ncalc/ops.py\n<<<<<<< SEARCH");
+    expect(prompts[0]).not.toContain("{example_path}");
+  });
   it("finds files a plan writes in bold", () => {
     const repo = samplePythonRepo();
     const files = filesFromPlan("## Files to change\n- **calc/ops.py**: add it\n- **tests/test_ops.py**: test it\n\n## Steps\n1. Go", repo);

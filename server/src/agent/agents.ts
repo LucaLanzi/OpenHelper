@@ -187,7 +187,8 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   const ps = atBase ? await retrieveAt(ctx, planText, dir) : await retrieve(ctx, planText);
   const files = filesFromPlan(planText, dir);
   const context = [formatFiles(files), formatPassages(ps)].filter(Boolean).join("\n\n");
-  const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context });
+  // A real path: small models copy a placeholder like path/to/file.py literally.
+  const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context, example_path: files[0]?.path ?? "relative/path/of/the/file" });
   const temperature = bestOf > 1 ? 0.2 + 0.25 * (n - 1) : 0.2;
   let reply = await ask(ctx, "implement", prompt, { temperature });
   const touched = new Set<string>();
