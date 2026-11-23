@@ -12,7 +12,7 @@ import { isSecretFile, scrub } from "../core/scrub.js";
 import { render, slugify, tail } from "../core/util.js";
 import { expandHome } from "../index/build.js";
 import type { ChatMessage } from "../llm/client.js";
-import { filesFromPlan, formatFiles, formatPassages, retrieve, type AgentContext } from "./context.js";
+import { filesFromPlan, formatFiles, formatPassages, retrieve, retrieveAt, type AgentContext } from "./context.js";
 
 const SYSTEM =
   "You are OpenHelper, a careful local coding assistant. Be correct before being complete. " +
@@ -151,7 +151,7 @@ export async function implement(ctx: AgentContext, planText: string, o: Implemen
     const dir = createWorktree(repo, base, branch, `${jobTag}-${n}`);
     ctx.log(`candidate ${n}/${bestOf}: worktree ${dir} on branch ${branch}`);
     try {
-      const c = await oneCandidate(ctx, planText, repo, dir, base, n, bestOf, o.kinds);
+      const c = await oneCandidate(ctx, planText, repo, dir, base, n, bestOf, Boolean(o.base), o.kinds);
       cands.push({ ...c, branch, dir });
       if (o.keepWorktree) await o.keepWorktree(dir, { ...c, branch });
     } catch (e) {
@@ -183,8 +183,8 @@ function failures(c: Candidate): number {
   return c.checks.filter((r) => r.status === "fail" || r.status === "error").length + c.edit_errors.length;
 }
 
-async function oneCandidate(ctx: AgentContext, planText: string, repo: string, dir: string, base: string, n: number, bestOf: number, kinds?: CheckKind[]) {
-  const ps = await retrieve(ctx, planText);
+async function oneCandidate(ctx: AgentContext, planText: string, repo: string, dir: string, base: string, n: number, bestOf: number, atBase: boolean, kinds?: CheckKind[]) {
+  const ps = atBase ? await retrieveAt(ctx, planText, dir) : await retrieve(ctx, planText);
   const files = filesFromPlan(planText, dir);
   const context = [formatFiles(files), formatPassages(ps)].filter(Boolean).join("\n\n");
   const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context });

@@ -45,6 +45,25 @@ export async function retrieve(ctx: AgentContext, query: string, k = ctx.config.
   return idx.search(query, k, qv).map((chunk, i) => ({ label: `S${i + 1}`, chunk }));
 }
 
+/**
+ * For evals: the index is built from the newest code, so it would show the model the answer.
+ * Keep only repo passages whose text is in this older checkout.
+ */
+export async function retrieveAt(ctx: AgentContext, query: string, root: string, k = ctx.config.retrieval_top_k): Promise<Passage[]> {
+  const inCheckout = (c: Chunk) => {
+    try {
+      return readFileSync(join(root, c.path), "utf8").includes(c.text);
+    } catch {
+      return false;
+    }
+  };
+  const all = await retrieve(ctx, query, k * 4);
+  return all
+    .filter((p) => !p.chunk.source.startsWith("repo:") || inCheckout(p.chunk))
+    .slice(0, k)
+    .map((p, i) => ({ ...p, label: `S${i + 1}` }));
+}
+
 export function formatPassages(ps: Passage[], maxChars = 24_000): string {
   if (!ps.length) return "(no context passages were found)";
   let out = "";

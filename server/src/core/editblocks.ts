@@ -75,6 +75,11 @@ export function applyEditBlocks(root: string, blocks: EditBlock[]): EditOutcome[
       continue;
     }
     if (b.search.trim() === "") {
+      // The line above the block was a sentence, so this would create a junk file named after it.
+      if (/\s/.test(b.path)) {
+        out.push({ path: b.path, ok: false, error: "not a file path" });
+        continue;
+      }
       if (existsSync(full)) {
         out.push({ path: b.path, ok: false, error: "empty SEARCH but file already exists" });
         continue;

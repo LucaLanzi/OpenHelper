@@ -11,7 +11,7 @@ import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
 import { canSend, matrix, withinBudget } from "../src/core/links.js";
 import { loadDocPacks, loadLanguages, loadModels, loadWorkflows } from "../src/core/load.js";
 import type { DocPack, HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
-import { Platform as PlatformSchema, SandboxConfig, WorkspaceConfig } from "../src/core/schemas.js";
+import { Platform as PlatformSchema, Project as ProjectSchema, SandboxConfig, WorkspaceConfig } from "../src/core/schemas.js";
 import { scrub, isSecretFile } from "../src/core/scrub.js";
 import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
@@ -19,7 +19,8 @@ import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
 import { addLocalDocs, docStatus } from "../src/index/docs.js";
 import { implement } from "../src/agent/agents.js";
-import type { AgentContext } from "../src/agent/context.js";
+import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
+import { buildIndex } from "../src/index/build.js";
 import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
 import { git, REPO_ROOT, samplePythonRepo, tempWorkspace, write } from "./helpers.js";
 
@@ -412,6 +413,27 @@ describe("implement", () => {
     await implement(ctx, "Edit add\n\n## Files to change\n- `notes.txt`", { discardBranches: true });
     expect(prompts[1]).toContain("def add(a, b):");
     expect(prompts[1]).not.toContain("TOP-SECRET");
+  });
+});
+
+describe("evals", () => {
+  it("hides passages from commits newer than the task", async () => {
+    const dir = tempWorkspace();
+    const repo = samplePythonRepo();
+    const project = ProjectSchema.parse({ name: "calc", repos: [repo] });
+    await buildIndex(project);
+    const old = join(dir, "old");
+    git(repo, "worktree", "add", "-q", "--detach", old, "HEAD~2");
+    const ctx = { config: { retrieval_top_k: 8 }, project, log: () => {} } as unknown as AgentContext;
+    const hasAnswer = (ps: Awaited<ReturnType<typeof retrieve>>) => ps.some((p) => p.chunk.text.includes("def mul"));
+    expect(hasAnswer(await retrieve(ctx, "mul function"))).toBe(true);
+    expect(hasAnswer(await retrieveAt(ctx, "mul function", old))).toBe(false);
+  });
+  it("does not create a file named after a sentence", () => {
+    const dir = tempWorkspace();
+    const blocks = parseEditBlocks("No changes are needed.\n<<<<<<< SEARCH\n=======\nx\n>>>>>>> REPLACE\n");
+    expect(applyEditBlocks(dir, blocks)[0]).toMatchObject({ ok: false, error: "not a file path" });
+    expect(existsSync(join(dir, "No changes are needed."))).toBe(false);
   });
 });
 
