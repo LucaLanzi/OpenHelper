@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyFailure, runChecks } from "../checks/runner.js";
 import { assess, countValidCitations, type CheckResult, type ConfidenceReport } from "../core/confidence.js";
@@ -187,13 +187,14 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   const ps = atBase ? await retrieveAt(ctx, planText, dir) : await retrieve(ctx, planText);
   const files = filesFromPlan(planText, dir);
   const context = [formatFiles(files), formatPassages(ps)].filter(Boolean).join("\n\n");
-  const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context });
+  // The format example uses a real path from the plan: the 8B copied a placeholder path verbatim.
+  const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context, example_path: files[0]?.path ?? "src/main.py" });
   const temperature = bestOf > 1 ? 0.2 + 0.25 * (n - 1) : 0.2;
   let reply = await ask(ctx, "implement", prompt, { temperature });
   const touched = new Set<string>();
   const missed = new Set<string>();
   const onlyFile = files.length === 1 ? files[0]!.path : undefined;
-  let editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
+  let editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile, files);
   let attempts = 1;
   let check = await runChecks(dir, ctx.languages, ctx.sandbox, {
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -223,7 +224,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
     reply = await ask(ctx, "repair", render(loadTemplate("repair"), { plan: planText, checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
-    editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
+    editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile, files);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
@@ -248,9 +249,26 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   return { n, confidence, checks: check.results, edit_errors: editErrors, attempts, diff, files: changed, hallucination: hall.matches };
 }
 
-function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>, onlyFile?: string): string[] {
-  // Small models often leave out the path when the plan names a single file.
-  const blocks = parseEditBlocks(reply).map((b) => (b.path || !onlyFile ? b : { ...b, path: onlyFile }));
+function applyAll(
+  ctx: AgentContext,
+  dir: string,
+  reply: string,
+  touched: Set<string>,
+  missed: Set<string>,
+  onlyFile?: string,
+  planFiles: { path: string; content: string }[] = [],
+): string[] {
+  const blocks = parseEditBlocks(reply).map((b) => {
+    // A missing or made-up path ("path/to/file.py") on an edit whose SEARCH text is in exactly one
+    // plan file: that file is meant. Otherwise small models leave the path out when one file changes.
+    const real = b.path && existsSync(join(dir, b.path));
+    if (real) return b;
+    const holders = b.search.trim() ? planFiles.filter((f) => f.content.includes(b.search)) : [];
+    const guess = holders.length === 1 ? holders[0]!.path : b.path ? undefined : onlyFile;
+    if (!guess) return b;
+    ctx.log(`edit ${b.path || "with no path"}: using ${guess}${holders.length === 1 ? ", which contains its SEARCH text" : ", the plan's only file"}`);
+    return { ...b, path: guess };
+  });
   if (!blocks.length) return ["the reply contained no search/replace blocks"];
   const out = applyEditBlocks(dir, blocks);
   for (const o of out) {
