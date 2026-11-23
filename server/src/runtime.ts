@@ -90,6 +90,12 @@ export class Runtime {
   }
 
   private async handle(job: Job, log: (s: string) => void, signal: AbortSignal): Promise<Record<string, unknown>> {
+    if (job.type === "docs") {
+      const id = String(job.input.pack ?? "");
+      const pack = loadDocPacks().find((p) => p.id === id);
+      if (!pack) throw new Error(`no doc pack ${id}`);
+      return { files: await fetchDocPack(pack, log) };
+    }
     const ctx = this.ctx(job, log, signal);
     const s = (k: string) => (typeof job.input[k] === "string" ? (job.input[k] as string) : "");
     switch (job.type) {
@@ -128,11 +134,6 @@ export class Runtime {
         const embed = this.platform.model.embed;
         const meta = await buildIndex(ctx.project, { log, ...(embed ? { llm: this.llm, embedModel: embed } : {}) });
         return { ...meta };
-      }
-      case "docs": {
-        const pack = loadDocPacks().find((p) => p.id === s("pack"));
-        if (!pack) throw new Error(`no doc pack ${s("pack")}`);
-        return { files: await fetchDocPack(pack, log) };
       }
       case "mine": {
         const tasks = mineProject(ctx.project, ctx.languages, { limit: Number(job.input.limit ?? 100) });

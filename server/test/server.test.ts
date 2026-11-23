@@ -121,6 +121,9 @@ describe("workflows", () => {
     expect(gate2.status).toBe("waiting-approval");
     expect(gate2.vars.plan).toContain("Note from Luca");
     expect(gate2.vars.patch).toContain("def sub(a, b):");
+    // Build and test artefacts never end up in the patch (the sample repo has no .gitignore).
+    expect(gate2.vars.patch).not.toContain("__pycache__");
+    expect(gate2.vars.patch).not.toContain(".pyc");
     await api("POST", `/api/runs/${run.id}/approve`, {});
     const done = await until(() => api<WorkflowRun>("GET", `/api/runs/${run.id}`), (r) => r.status === "done" || r.status === "failed");
     expect(done.status).toBe("done");

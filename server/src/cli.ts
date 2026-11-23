@@ -283,6 +283,12 @@ function sha256File(path: string): Promise<string> {
   });
 }
 
+// `openhelper ... | head` closes the pipe early; that is not an error.
+process.stdout.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EPIPE") process.exit(0);
+  throw e;
+});
+
 main().catch((e: Error) => {
   process.stderr.write(`error: ${e.message}\n`);
   process.exit(1);

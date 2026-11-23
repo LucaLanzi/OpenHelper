@@ -70,19 +70,19 @@ export function removeWorktree(repo: string, dir: string, deleteBranch?: string)
   }
 }
 
-export function diffAgainst(dir: string, base: string): string {
-  git(dir, ["add", "-A", "--", ".", ":!node_modules", ":!.venv"]);
-  return git(dir, ["diff", "--cached", base, "--", ".", ":!node_modules", ":!.venv"]);
+/**
+ * Diff and commit only the files the agent edited. Builds and tests leave artefacts
+ * (build/, __pycache__/) in the worktree; those must never end up in your branch.
+ */
+export function diffPaths(dir: string, base: string, paths: string[]): string {
+  if (!paths.length) return "";
+  git(dir, ["add", "-A", "--", ...paths]);
+  return git(dir, ["diff", "--cached", base, "--", ...paths]);
 }
 
-export function changedFiles(dir: string, base: string): string[] {
-  git(dir, ["add", "-A", "--", ".", ":!node_modules", ":!.venv"]);
-  return git(dir, ["diff", "--cached", "--name-only", base]).split("\n").filter(Boolean);
-}
-
-export function commitAll(dir: string, message: string): string {
-  git(dir, ["add", "-A", "--", ".", ":!node_modules", ":!.venv"]);
-  git(dir, ["commit", "-q", "--allow-empty", "-m", message]);
+export function commitPaths(dir: string, paths: string[], message: string): string {
+  git(dir, ["add", "-A", "--", ...paths]);
+  git(dir, ["commit", "-q", "-m", message, "--", ...paths]);
   return headSha(dir);
 }
 

@@ -112,9 +112,12 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   app.post("/api/jobs", async (req) => {
     const b = body<{ type?: JobType; project?: string; input?: Record<string, unknown>; model?: string; start?: boolean }>(req);
     if (!b.type || !JOB_TYPES.includes(b.type)) bad(`type must be one of ${JOB_TYPES.join(", ")}`);
-    if (!b.project) bad("project is required");
-    findProject(b.project);
-    const job = rt.queue.create({ type: b.type, project: b.project, platform: rt.platform.name, model: b.model ?? "", input: b.input ?? {} });
+    // Fetching a doc pack is the one job that belongs to no project.
+    if (b.type !== "docs") {
+      if (!b.project) bad("project is required");
+      findProject(b.project);
+    }
+    const job = rt.queue.create({ type: b.type, project: b.project ?? "", platform: rt.platform.name, model: b.model ?? "", input: b.input ?? {} });
     // Batch jobs only run when a person starts them; `start: true` is that person pressing Start.
     if (b.start) rt.queue.start(job.id);
     return job;
@@ -385,9 +388,10 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   // ===================================================================== dashboard
   const dist = resolve(repoRoot(), "dashboard", "dist");
   if (existsSync(join(dist, "index.html"))) {
-    await app.register(fastifyStatic, { root: dist, prefix: "/", wildcard: false });
+    // wildcard: files are looked up per request, so a rebuilt dashboard is served without a restart.
+    await app.register(fastifyStatic, { root: dist, prefix: "/" });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/")) return reply.status(404).send({ error: "not found" });
+      if (req.url.startsWith("/api/") || req.url.startsWith("/assets/")) return reply.status(404).send({ error: "not found" });
       return reply.type("text/html").send(readFileSync(join(dist, "index.html")));
     });
   }

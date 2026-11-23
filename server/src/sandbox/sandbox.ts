@@ -65,6 +65,7 @@ function baseEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
     LC_ALL: "C.UTF-8",
     TERM: "dumb",
     CI: "1",
+    PYTHONDONTWRITEBYTECODE: "1",
     ...extra,
   };
 }
@@ -91,7 +92,7 @@ class ContainerSandbox implements Sandbox {
     for (const p of o.readOnly ?? []) args.push("-v", `${p}:${p}:ro`);
     if (this.driver === "podman") args.push("--userns=keep-id");
     else if (process.getuid && process.getgid) args.push("--user", `${process.getuid()}:${process.getgid()}`);
-    args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", "-e", "CI=1", this.image, "sh", "-c", cmd);
+    args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", "-e", "CI=1", "-e", "PYTHONDONTWRITEBYTECODE=1", this.image, "sh", "-c", cmd);
     return exec(this.driver, args, cwd, baseEnv({}), o.timeoutMs);
   }
 }

@@ -4,7 +4,7 @@ import { classifyFailure, runChecks } from "../checks/runner.js";
 import { assess, countValidCitations, type CheckResult, type ConfidenceReport } from "../core/confidence.js";
 import { applyEditBlocks, parseEditBlocks } from "../core/editblocks.js";
 import { writeFileAtomic } from "../core/fsutil.js";
-import { changedFiles, commitAll, createWorktree, diffAgainst, headSha, isRepo, removeWorktree } from "../core/git.js";
+import { commitPaths, createWorktree, diffPaths, headSha, isRepo, removeWorktree } from "../core/git.js";
 import { loadTemplate } from "../core/load.js";
 import { ws } from "../core/paths.js";
 import type { CheckKind } from "../core/schemas.js";
@@ -187,12 +187,13 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
   const prompt = render(loadTemplate("implement"), { project: ctx.project.name, plan: planText, context });
   const temperature = bestOf > 1 ? 0.2 + 0.25 * (n - 1) : 0.2;
   let reply = await ask(ctx, prompt, { temperature });
-  let editErrors = applyAll(ctx, dir, reply);
+  const touched = new Set<string>();
+  let editErrors = applyAll(ctx, dir, reply, touched);
   let attempts = 1;
   let check = await runChecks(dir, ctx.languages, ctx.sandbox, {
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
     ...(kinds?.length ? { kinds } : {}),
-    changedFiles: changedFiles(dir, base),
+    changedFiles: [...touched],
     onProgress: (r) => ctx.log(`check ${r.language}/${r.id}: ${r.status}${r.reason ? ` (${r.reason})` : ""}`),
   });
   let confidence = assess(check.results, { editErrors: editErrors.length });
@@ -205,8 +206,8 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
       ...editErrors.map((e) => `edit error: ${e}`),
       ...failed.map((r) => `### ${r.language}/${r.id} (${r.status})\n${tail(r.output, 3000)}`),
     ].join("\n\n");
-    const touched = changedFiles(dir, base).slice(0, 8);
-    const current = touched
+    const current = [...touched]
+      .slice(0, 8)
       .map((p) => {
         try {
           return { path: p, content: readFileSync(join(dir, p), "utf8").slice(0, 40_000) };
@@ -216,21 +217,23 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
     reply = await ask(ctx, render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
-    editErrors = applyAll(ctx, dir, reply);
+    editErrors = applyAll(ctx, dir, reply, touched);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
-      changedFiles: changedFiles(dir, base),
+      changedFiles: [...touched],
       onProgress: (r) => ctx.log(`check ${r.language}/${r.id}: ${r.status}`),
     });
     confidence = assess(check.results, { editErrors: editErrors.length });
     attempts++;
   }
 
-  const changed = changedFiles(dir, base);
-  const diff = diffAgainst(dir, base);
-  if (changed.length) commitAll(dir, `OpenHelper: ${planText.split("\n").find((l) => l.trim())?.slice(0, 60) ?? "change"}\n\nConfidence: ${confidence.status}`);
-  if (!changed.length && confidence.status !== "red") {
+  const changed = [...touched].sort();
+  const diff = diffPaths(dir, base, changed);
+  if (changed.length && diff.trim()) {
+    commitPaths(dir, changed, `OpenHelper: ${planText.split("\n").find((l) => l.trim())?.slice(0, 60) ?? "change"}\n\nConfidence: ${confidence.status}`);
+  }
+  if (!diff.trim() && confidence.status !== "red") {
     confidence = { status: "red", reasons: ["the model made no changes"] };
   }
   const hall = classifyFailure(check.results, ctx.languages);
@@ -238,11 +241,14 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
   return { n, confidence, checks: check.results, edit_errors: editErrors, attempts, diff, files: changed, hallucination: hall.matches };
 }
 
-function applyAll(ctx: AgentContext, dir: string, reply: string): string[] {
+function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>): string[] {
   const blocks = parseEditBlocks(reply);
   if (!blocks.length) return ["the reply contained no search/replace blocks"];
   const out = applyEditBlocks(dir, blocks);
-  for (const o of out) ctx.log(`edit ${o.path}: ${o.ok ? "applied" : `failed (${o.error})`}`);
+  for (const o of out) {
+    ctx.log(`edit ${o.path}: ${o.ok ? "applied" : `failed (${o.error})`}`);
+    if (o.ok) touched.add(o.path);
+  }
   return out.filter((o) => !o.ok).map((o) => `${o.path}: ${o.error}`);
 }
 

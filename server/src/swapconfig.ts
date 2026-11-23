@@ -28,15 +28,12 @@ export function llamaSwapConfig(platform: Platform, models: ModelPack[], llamaSe
       `-m ${JSON.stringify(modelFile(m))}`,
       `-c ${o?.ctx ?? m.ctx_default}`,
       "-ngl 999",
-      ...(o?.n_cpu_moe !== undefined ? [`--n-cpu-moe ${o.n_cpu_moe}`] : []),
+      // MoE on a discrete GPU: keep experts in RAM until `make tune` finds how many fit in VRAM.
+      ...(o?.n_cpu_moe !== undefined ? [`--n-cpu-moe ${o.n_cpu_moe}`] : m.kind === "moe" && platform.os !== "macos" ? ["--cpu-moe"] : []),
       ...m.server_args,
       ...(o?.extra_args ?? []),
     ];
-    entries[m.id] = {
-      cmd: args.join(" "),
-      ttl: platform.resources.unload_after_min * 60,
-      ...(m.roles.includes("embed") ? {} : { aliases: [] }),
-    };
+    entries[m.id] = { cmd: args.join(" "), ttl: platform.resources.unload_after_min * 60 };
   }
   const chat = offered.filter((m) => !m.roles.includes("embed")).map((m) => m.id);
   const embed = offered.filter((m) => m.roles.includes("embed")).map((m) => m.id);
