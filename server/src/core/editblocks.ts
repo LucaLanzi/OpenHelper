@@ -54,7 +54,11 @@ export function parseEditBlocks(text: string): EditBlock[] {
 }
 
 function cleanPath(line: string): string {
-  return line.trim().replace(/^[#*`\s]+|[*`:\s]+$/g, "").replace(/^(file|path):\s*/i, "");
+  return line
+    .trim()
+    .replace(/^[#*`\s]+/, "")
+    .replace(/^(file\s*path|file|path)\s*:\s*/i, "")
+    .replace(/^[*`\s]+|[*`:\s]+$/g, "");
 }
 
 /** Refuse paths that escape the worktree or touch git internals. */

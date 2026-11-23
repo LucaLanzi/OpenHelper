@@ -483,6 +483,11 @@ describe("evals", () => {
     expect(applyEditBlocks(dir, blocks)[0]).toMatchObject({ ok: false, error: "not a file path" });
     expect(existsSync(join(dir, "No changes are needed."))).toBe(false);
   });
+  it("reads a path written with a label or markdown", () => {
+    for (const label of ["File path: calc/ops.py", "**File path:** `calc/ops.py`", "file: calc/ops.py", "`calc/ops.py`:"]) {
+      expect(parseEditBlocks(`${label}\n<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n`)[0]?.path).toBe("calc/ops.py");
+    }
+  });
 });
 
 function implementCtx(repo: string, sandbox: Sandbox, reply: (prompt: string) => string): AgentContext {
