@@ -201,6 +201,7 @@ ensure_node() {
 # ---------------------------------------------------------------------------- Linux
 linux() {
     have apt-get || die "this installer supports Ubuntu/Debian (apt). On other distributions install: git cmake gcc g++ make curl python3 pipx nodejs>=$NODE_MAJOR shellcheck cppcheck clang-tidy bats"
+    # shellcheck disable=SC1091
     . /etc/os-release 2>/dev/null || true
     ok "${PRETTY_NAME:-Linux} ($arch)"
     if [[ -z "${SKIP_APT:-}" ]]; then
@@ -272,6 +273,19 @@ brew_install() {  # brew_install <why> <formula>...
     ok "$why: installed ${need[*]}"
 }
 
+# The pytest check runs `python3 -m pytest`, which can't see a pipx install and Homebrew's Python
+# refuses pip. The engine puts this environment first on PATH for checks run on the host.
+ensure_check_python() {
+    local venv="$here/vendor/check-python"
+    if "$venv/bin/python3" -c "import pytest" 2>/dev/null; then ok "pytest: already installed"; return; fi
+    if python3 -m venv --clear --system-site-packages "$venv" && "$venv/bin/python3" -m pip install -q pytest; then
+        ok "pytest: installed in vendor/check-python"
+    else
+        warn "pytest: could not install it in vendor/check-python"
+        missing_after+=(pytest)
+    fi
+}
+
 macos() {
     ok "macOS $(sw_vers -productVersion) ($arch)"
     [[ "$arch" == arm64 ]] || warn "this is an Intel Mac; there is no Metal acceleration for llama.cpp here"
@@ -315,7 +329,7 @@ macos() {
         ln -sf "$(brew --prefix llvm)/bin/clang-tidy" "$HOME/.local/bin/clang-tidy"
         ok "linked clang-tidy into ~/.local/bin (you can ignore Homebrew's llvm PATH advice)"
     fi
-    pipx_tool pytest pytest
+    ensure_check_python
     pipx_tool ruff ruff
     pipx_tool mypy mypy
     pipx_tool cmake-lint cmakelang

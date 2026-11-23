@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
-import { packsDir } from "../core/paths.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { packsDir, repoRoot } from "../core/paths.js";
 import type { SandboxConfig } from "../core/schemas.js";
 
 export interface RunResult {
@@ -70,12 +72,19 @@ function baseEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   };
 }
 
+/** PATH for host checks, with the Python the macOS installer set up (vendor/check-python) first. */
+function hostPath(): string {
+  const path = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin";
+  const bin = join(repoRoot(), "vendor", "check-python", "bin");
+  return existsSync(bin) ? `${bin}:${path}` : path;
+}
+
 /** Runs on the host. Only for interactive use; platforms refuse auto_run with this driver. */
 class HostSandbox implements Sandbox {
   driver = "none" as const;
   private unshare = canUnshareNet();
   run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
-    const env = baseEnv({ OH_PACKS: packsDir() });
+    const env = baseEnv({ OH_PACKS: packsDir(), PATH: hostPath() });
     // Where unprivileged user namespaces exist, still drop the network (loopback stays up,
     // because many test suites start local servers).
     if (this.unshare) return exec("unshare", ["-rn", "sh", "-c", 'ip link set lo up && exec sh -c "$0"', cmd], cwd, env, o.timeoutMs);

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { audit, readAudit, verifyAudit } from "../src/core/audit.js";
@@ -7,13 +7,14 @@ import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
 import { canSend, matrix, withinBudget } from "../src/core/links.js";
 import { loadDocPacks, loadLanguages, loadModels, loadWorkflows } from "../src/core/load.js";
 import type { HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
-import { Platform as PlatformSchema } from "../src/core/schemas.js";
+import { Platform as PlatformSchema, SandboxConfig } from "../src/core/schemas.js";
 import { scrub, isSecretFile } from "../src/core/scrub.js";
 import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
-import { tempWorkspace, write } from "./helpers.js";
+import { makeSandbox } from "../src/sandbox/sandbox.js";
+import { REPO_ROOT, tempWorkspace, write } from "./helpers.js";
 
 const desktop: HardwareInfo = {
   os: "linux",
@@ -293,5 +294,20 @@ describe("config staging", () => {
     expect(() => stage("secrets/tokens.toml", "x", () => {})).toThrow();
     const s = stage("links.toml", "not = [valid", () => {});
     expect(s.valid).toBe(false);
+  });
+});
+
+describe("host sandbox", () => {
+  it("puts the installer's check Python first on PATH", async () => {
+    const root = tempWorkspace();
+    const python = write(root, "vendor/check-python/bin/python3", "#!/bin/sh\n");
+    chmodSync(python, 0o755);
+    process.env.OPENHELPER_ROOT = root;
+    try {
+      const r = await makeSandbox(SandboxConfig.parse({})).run("command -v python3", root, { timeoutMs: 5000 });
+      expect(r.output.trim()).toBe(python);
+    } finally {
+      process.env.OPENHELPER_ROOT = REPO_ROOT;
+    }
   });
 });
