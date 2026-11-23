@@ -106,7 +106,8 @@ build: node_modules ## Build the engine and dashboard
 typecheck: node_modules ## Type-check the engine and dashboard
 	npm run typecheck
 
-test: node_modules ## Run the test suite (uses a mock model server, no GPU needed)
+test: ## Run the test suite (uses a mock model server, no GPU needed)
+	@test -d node_modules || $(MAKE) node_modules
 	npm test
 
 lint-scripts: ## shellcheck every shell script

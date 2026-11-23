@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, utimesSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -343,6 +343,16 @@ describe("setup scripts", () => {
     write(repo, ".git/packed-refs", Array.from({ length: 20_000 }, (_, i) => `${sha} refs/tags/b${i}\n`).join(""));
     const out = execFileSync("bash", ["-c", '. "$1/scripts/lib.sh"; newest_release_tag "$2"', "_", REPO_ROOT, repo], { encoding: "utf8" });
     expect(out.trim()).toBe("b19999");
+  });
+  it("make test does not reinstall dependencies that already exist", () => {
+    const dir = tempWorkspace();
+    for (const f of ["package.json", "server/package.json", "dashboard/package.json"]) write(dir, f, "{}");
+    mkdirSync(join(dir, "node_modules"));
+    utimesSync(join(dir, "node_modules"), new Date(0), new Date(0));
+    writeFileSync(join(dir, "Makefile"), readFileSync(join(REPO_ROOT, "Makefile")));
+    const out = execFileSync("make", ["-n", "test"], { cwd: dir, encoding: "utf8" });
+    expect(out).toContain("npm test");
+    expect(out).not.toContain("npm install");
   });
 });
 
