@@ -23,6 +23,25 @@ Everything in this repo was built and tested in a cloud workspace against a mock
 | Sandbox: Docker/Podman image and Lima VM | No container runtime in the build environment | `make sandbox-image`, then `node server/dist/cli.js check <repo> --sandbox docker` |
 | The F´ repos' builds inside the sandbox | Need the F´ toolchain (`fprime-util`) in the image | Run checks on one F´ repo; extend `sandbox/Dockerfile` if needed |
 
+## Mac first: the whole pipeline on Qwen3-8B
+
+Get every step working on the light model before downloading anything larger. Both `@plan` and `@build` point at the Mac. Results so far are in brackets.
+
+- [x] `make install` and `make setup` on macOS; llama.cpp built with Metal; llama-swap 275 [done 2026-11-23]
+- [x] Qwen3-8B Q4_K_M and Qwen3-Embedding-0.6B Q8 downloaded and pinned; `make models` shows both [done]
+- [x] `make bench`: [prompt 225 tok/s at 512, 202 at 4096; generation 24.9 tok/s]
+- [x] Lima VM with the sandbox image and the AppArmor profile; `[sandbox] driver = "lima"`
+- [ ] Services on the current branch; `curl 127.0.0.1:8740/api/health` is OK; the dashboard opens with the token
+- [ ] Ask: a question about a project streams an answer that cites its passages
+- [ ] Workflow: `implement-feature` on a small task: plan, approve, build in the sandbox, review; the branch stays in the repo and nothing is merged. Note the time per step
+- [ ] Eval with LIMIT=5 on two projects: no task left unscored, at least one pass. Record passed, errors per 100, green precision, minutes per task
+- [ ] Model swap from the dashboard; kill switch on and off; `/api/audit/verify` reports no break
+- [ ] MCP server: `list_projects`, `search` and `run_checks` answer from an editor
+- [ ] Services come back after logging out and in
+- [ ] `url` in `workspace/platforms/mac.toml` is a real address
+
+Then ask the owner before downloading the 27B or 35B model.
+
 ## Desktop (Ubuntu 24.04, 2080 Ti)
 
 - [ ] `nvidia-smi` shows the 2080 Ti
