@@ -130,7 +130,7 @@ export type WorkflowDef = z.infer<typeof WorkflowDef>;
 
 export const SandboxConfig = z.object({
   driver: z.enum(["none", "docker", "podman", "lima"]).default("none"),
-  image: z.string().default("ghcr.io/openhelper/sandbox:latest"),
+  image: z.string().default("openhelper-sandbox:latest"),
   vm: z.string().default("openhelper"),
   /** Extra mounts are refused; only the worktree is mounted. Network is always off. */
 });
@@ -151,8 +151,14 @@ export const Platform = z.object({
   /** Name of the env var or secrets file key that holds this node's token. */
   token_ref: z.string().default(""),
   model: z.object({
+    /** Default model; the dashboard can swap at runtime (stored in workspace/state/). */
     current: z.string(),
+    /** Models offered in the dashboard picker; empty means every registry model that fits. */
     allowed: z.array(z.string()).default([]),
+    /** Embedding model for hybrid search; empty means keyword search only. */
+    embed: z.string().default(""),
+    /** Default model for the light role (e.g. /explain), if set. */
+    light: z.string().default(""),
   }),
   model_overrides: z.record(z.string(), ModelOverride).default({}),
   resources: z
@@ -162,7 +168,7 @@ export const Platform = z.object({
       batch_jobs: z.enum(["manual"]).default("manual"),
     })
     .default({ unload_after_min: 30, batch_jobs: "manual" }),
-  sandbox: SandboxConfig.default({ driver: "none", image: "ghcr.io/openhelper/sandbox:latest", vm: "openhelper" }),
+  sandbox: SandboxConfig.default({ driver: "none", image: "openhelper-sandbox:latest", vm: "openhelper" }),
   /** Agents this platform may run. */
   agents: z.array(AgentKind).default(["planner", "coder", "reviewer", "explainer"]),
   /** Run generated code automatically. Refused unless a sandbox driver other than none is set. */

@@ -1,0 +1,27 @@
+# Reference laptop: 32 GB M1 Pro MacBook Pro.
+name = "mac"
+description = "M1 Pro MacBook Pro, 32 GB"
+url = "http://mac.tailnet.example:8740"
+os = "macos"
+token_ref = "mac"
+agents = ["planner", "reviewer", "explainer", "coder"]
+auto_run = false
+
+[model]
+current = "qwen3.6-27b-q4km"
+light = "qwen3-8b-q4km"
+embed = ""
+allowed = ["qwen3.6-27b-q4km", "qwen3.6-35b-a3b-q4km", "qwen3-8b-q4km"]
+
+[model_overrides."qwen3.6-27b-q4km"]
+ctx = 16384
+extra_args = []
+
+[resources]
+unload_after_min = 20
+batch_jobs = "manual"
+
+[sandbox]
+driver = "none"   # lima once the Lima VM is set up (docs/SANDBOX.md)
+vm = "openhelper"
+image = "openhelper-sandbox:latest"

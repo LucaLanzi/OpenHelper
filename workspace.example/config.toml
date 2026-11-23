@@ -1,0 +1,25 @@
+# This machine's settings. `openhelper init --platform NAME` sets `self`.
+self = "desktop"
+
+# This machine runs agents (node) and the dashboard (control). A second machine
+# that only runs agents can use roles = ["node"].
+roles = ["node", "control"]
+
+# Listen on localhost by default. To reach the dashboard from your phone, set this
+# to the machine's Tailscale IP (tailscale ip -4). Never 0.0.0.0.
+bind = "127.0.0.1"
+port = 8740
+
+# llama-swap, which starts and swaps llama-server. Localhost only.
+llm_url = "http://127.0.0.1:8741"
+
+# How many times the coder may try to fix failing checks.
+repair_attempts = 2
+# Passages retrieved per question. Keep it low on slow prompt processing (the Mac).
+retrieval_top_k = 8
+
+# Workflow packs say "@plan" and "@build"; point them at your platforms.
+# With one machine, point both at it.
+[aliases]
+plan = "desktop"
+build = "desktop"
