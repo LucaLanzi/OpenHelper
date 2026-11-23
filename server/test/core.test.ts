@@ -7,13 +7,14 @@ import { assess, countValidCitations, type CheckResult } from "../src/core/confi
 import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
 import { canSend, matrix, withinBudget } from "../src/core/links.js";
 import { loadDocPacks, loadLanguages, loadModels, loadWorkflows } from "../src/core/load.js";
-import type { HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
+import type { DocPack, HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
 import { Platform as PlatformSchema, SandboxConfig } from "../src/core/schemas.js";
 import { scrub, isSecretFile } from "../src/core/scrub.js";
 import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
+import { addLocalDocs, docStatus } from "../src/index/docs.js";
 import { makeSandbox } from "../src/sandbox/sandbox.js";
 import { git, REPO_ROOT, tempWorkspace, write } from "./helpers.js";
 
@@ -322,5 +323,14 @@ describe("setup scripts", () => {
     write(repo, ".git/packed-refs", Array.from({ length: 20_000 }, (_, i) => `${sha} refs/tags/b${i}\n`).join(""));
     const out = execFileSync("bash", ["-c", '. "$1/scripts/lib.sh"; newest_release_tag "$2"', "_", REPO_ROOT, repo], { encoding: "utf8" });
     expect(out.trim()).toBe("b19999");
+  });
+});
+
+describe("doc packs", () => {
+  it("counts a doc file larger than the source-file limit", () => {
+    const dir = tempWorkspace();
+    const file = write(dir, "big.md", "x".repeat(600 * 1024));
+    expect(addLocalDocs("big", file)).toBe(1);
+    expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
   });
 });

@@ -7,7 +7,7 @@ import { isSecretFile, scrub } from "../core/scrub.js";
 import { walkFiles } from "../core/walk.js";
 import type { LlmClient } from "../llm/client.js";
 import { chunkFile, type Chunk } from "./chunk.js";
-import { docTextDir } from "./docs.js";
+import { docFiles, docTextDir } from "./docs.js";
 import { SearchIndex, type IndexMeta } from "./search.js";
 
 export function expandHome(p: string): string {
@@ -63,7 +63,7 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     }
     const src = `doc:${id}`;
     let n = 0;
-    for (const rel of walkFiles(dir, { maxFileBytes: 16 * 1024 * 1024 })) {
+    for (const rel of docFiles(dir)) {
       for (const c of chunkFile(src, rel, readFileSync(join(dir, rel), "utf8"))) {
         chunks.push(c);
         n++;

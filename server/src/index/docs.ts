@@ -22,10 +22,15 @@ export function docTextDir(pack: string): string {
   return join(ws.docs(), pack, "text");
 }
 
+/** Doc files can be large (the Node.js API is one file), so they get a higher limit than source files. */
+export function docFiles(dir: string): string[] {
+  return walkFiles(dir, { maxFileBytes: 16 * 1024 * 1024 });
+}
+
 export function docStatus(pack: DocPack): { fetched: boolean; files: number; locked: boolean } {
   const dir = docTextDir(pack.id);
   const lock = readJson<Lock>(lockFile(), {});
-  const files = existsSync(dir) ? walkFiles(dir).length : 0;
+  const files = existsSync(dir) ? docFiles(dir).length : 0;
   return { fetched: files > 0, files, locked: pack.sources.every((s) => Boolean(s.sha256 || lock[s.url])) };
 }
 
@@ -59,7 +64,7 @@ export async function fetchDocPack(pack: DocPack, log: (s: string) => void = () 
     extractInto(file, src.format, src.subdir, text);
   }
   writeFileAtomic(lockFile(), JSON.stringify(lock, null, 2));
-  return walkFiles(text).length;
+  return docFiles(text).length;
 }
 
 /** Use docs the user already downloaded (e.g. the cppreference offline book). */
@@ -72,7 +77,7 @@ export function addLocalDocs(pack: string, path: string): number {
   else if (/\.(tar|tgz|tar\.(gz|xz|bz2))$/.test(path)) extractInto(path, "tar", "", text);
   else if (path.endsWith(".zip")) extractInto(path, "zip", "", text);
   else convertTree(path, text);
-  return walkFiles(text).length;
+  return docFiles(text).length;
 }
 
 function extractInto(file: string, format: string, subdir: string, textDir: string): void {
