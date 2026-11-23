@@ -10,7 +10,7 @@ Rules:
 - Change only what the plan needs. Do not invent APIs, flags, packages or files; if something you
   need is not in the context, say so in one line at the end instead of guessing.
 - Express every change as search/replace blocks. Every block starts with the file's path on its own line:
-{example_path}
+path/to/file.py
 <<<<<<< SEARCH
 exact lines currently in the file (copy them exactly, enough to be unique)
 =======

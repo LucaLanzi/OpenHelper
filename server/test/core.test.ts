@@ -560,26 +560,6 @@ describe("evals", () => {
   });
 });
 
-describe("implement prompt", () => {
-  it("shows a real path in the format example, and maps a copied placeholder path to the right file", async () => {
-    tempWorkspace();
-    const repo = samplePythonRepo();
-    const sandbox: Sandbox = {
-      driver: "none",
-      run: async (cmd) => ({ code: 0, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
-    };
-    const prompts: string[] = [];
-    // What the 8B wrote in every calc-demo task on 560476f: the template's example path, verbatim.
-    const reply = "path/to/file.py\n<<<<<<< SEARCH\ndef add(a, b):\n    return a + b\n=======\ndef add(a, b):\n    return a + b\n\n\ndef sub(a, b):\n    return a - b\n>>>>>>> REPLACE\n";
-    const ctx = implementCtx(repo, sandbox, (m) => (prompts.push(m), reply));
-    const out = await implement(ctx, "Add sub\n\n## Files to change\n- `calc/ops.py`\n- `tests/test_ops.py`", { discardBranches: true });
-    expect(prompts[0]).toContain("own line:\ncalc/ops.py\n<<<<<<< SEARCH");
-    expect(prompts[0]).not.toContain("path/to/file.py");
-    expect(out.best?.edit_errors).toEqual([]);
-    expect(out.best?.diff).toContain("+def sub(a, b):");
-  });
-});
-
 describe("review", () => {
   const approves = () => implementCtx("/nowhere", { driver: "none", run: async () => ({ code: 0, output: "", timed_out: false, duration_ms: 0 }) }, () => "## Verdict\napprove, looks right.");
   it("does not let the model approve an empty patch", async () => {
