@@ -1,0 +1,12 @@
+# Each user's private data. Never commit it to the engine repo.
+/workspace/
+
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Build products of setup
+/vendor/
+/models-cache/

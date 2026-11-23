@@ -1,0 +1,12 @@
+name: explain
+description: Answer a question about your code or a language, citing sources.
+inputs: [task]
+steps:
+  - id: answer
+    platform: "@build"
+    agent: explainer
+    prompt: "/explain {task}"
+limits:
+  max_hops: 1
+  max_wall: 20m
+  max_tokens: 40000

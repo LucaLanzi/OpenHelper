@@ -1,0 +1,38 @@
+id = "bash"
+name = "Bash and POSIX shell"
+detect = ["**/*.sh", "**/*.bash"]
+source_globs = ["**/*.sh", "**/*.bash"]
+test_globs = ["**/*.bats"]
+docs = ["gnu-bash", "man-core"]
+hallucination_patterns = ["command not found", "invalid option", "unrecognized option"]
+
+[lsp]
+command = "bash-language-server"
+args = ["start"]
+
+[[checks]]
+id = "syntax"
+name = "bash -n"
+kind = "syntax"
+order = 5
+run = "for f in {files}; do bash -n \"$f\" || exit 1; done"
+files = ["**/*.sh", "**/*.bash"]
+requires = ["bash"]
+
+[[checks]]
+id = "shellcheck"
+name = "shellcheck"
+kind = "lint"
+order = 60
+run = "shellcheck -x {files}"
+files = ["**/*.sh", "**/*.bash"]
+requires = ["shellcheck"]
+
+[[checks]]
+id = "bats"
+name = "bats tests"
+kind = "test"
+order = 40
+when_files = ["**/*.bats"]
+run = "bats -r ."
+requires = ["bats"]

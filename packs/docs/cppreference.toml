@@ -1,0 +1,8 @@
+id = "cppreference"
+name = "cppreference.com (C and C++ reference)"
+version = "pending"
+license = "CC-BY-SA-3.0 and GFDL; not redistributable here, fetched by each user"
+redistributable = false
+homepage = "https://en.cppreference.com/w/Cppreference:Archives"
+verified = false
+notes = "Download the offline HTML book from the archives page, then run `openhelper docs add-local cppreference <path>`; the URL is pinned here once chosen."

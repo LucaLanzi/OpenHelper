@@ -1,0 +1,24 @@
+# Main model for the reference desktop (2080 Ti 11 GB + 32 GB RAM).
+# MoE: only ~3B parameters are active per token, so experts can live in system RAM.
+id = "qwen3.6-35b-a3b-q4km"
+name = "Qwen3.6 35B-A3B (Q4_K_M)"
+family = "qwen3.6"
+kind = "moe"
+params_b = 35
+active_params_b = 3
+quant = "Q4_K_M"
+size_gb = 22
+roles = ["main"]
+license = "apache-2.0 (reported; confirm on the model card before pinning)"
+min_usable_gb = 25
+ctx_default = 32768
+tokenizer = "qwen3.6"
+# Experts on the CPU; sweep --n-cpu-moe with `make tune` and record the best value per platform.
+server_args = ["--jinja", "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]
+verified = false
+sha256 = ""
+notes = "Pin source and sha256 with `openhelper models pin` after the Phase 0 bake-off."
+
+[source]
+hf_repo = ""
+filename = ""

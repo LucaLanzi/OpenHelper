@@ -1,0 +1,38 @@
+id = "make"
+name = "GNU Make"
+detect = ["Makefile", "makefile", "GNUmakefile", "**/*.mk"]
+source_globs = ["Makefile", "makefile", "GNUmakefile", "**/*.mk"]
+test_globs = []
+docs = ["gnu-make"]
+hallucination_patterns = ["No rule to make target", "missing separator"]
+
+[[checks]]
+id = "makecheck"
+name = "Dry run, undefined variables, tabs and .PHONY"
+kind = "syntax"
+order = 8
+when_files = ["Makefile", "makefile", "GNUmakefile"]
+run = "sh \"$OH_PACKS/languages/scripts/make-check.sh\""
+requires = ["make"]
+
+[[checks]]
+id = "make-build"
+name = "make (default target)"
+kind = "build"
+order = 12
+when_files = ["Makefile", "makefile", "GNUmakefile"]
+unless_files = ["CMakeLists.txt"]
+run = "make -j"
+requires = ["make"]
+timeout_s = 1800
+
+[[checks]]
+id = "make-test"
+name = "make test or make check, if the target exists"
+kind = "test"
+order = 42
+when_files = ["Makefile", "makefile", "GNUmakefile"]
+unless_files = ["CMakeLists.txt"]
+run = "sh \"$OH_PACKS/languages/scripts/make-test.sh\""
+requires = ["make"]
+timeout_s = 1800

@@ -1,0 +1,11 @@
+id = "gnu-make"
+name = "GNU Make manual"
+version = "latest"
+license = "GFDL-1.3; fetched by each user"
+redistributable = false
+homepage = "https://www.gnu.org/software/make/manual/"
+verified = false
+
+[[sources]]
+url = "https://www.gnu.org/software/make/manual/make.html"
+format = "html"

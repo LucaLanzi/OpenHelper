@@ -1,0 +1,51 @@
+id = "python"
+name = "Python"
+detect = ["**/*.py", "pyproject.toml", "setup.py", "requirements.txt"]
+source_globs = ["**/*.py"]
+test_globs = ["**/test_*.py", "**/*_test.py", "**/tests/**/*.py", "**/conftest.py"]
+docs = ["python-stdlib"]
+hallucination_patterns = [
+  "ModuleNotFoundError",
+  "ImportError: cannot import name",
+  "AttributeError: module '[^']+' has no attribute",
+  "NameError: name '[^']+' is not defined",
+  "unexpected keyword argument",
+]
+
+[lsp]
+command = "basedpyright-langserver"
+args = ["--stdio"]
+
+[[checks]]
+id = "compile"
+name = "Byte-compile every file"
+kind = "syntax"
+order = 5
+run = "python3 -m py_compile {files}"
+files = ["**/*.py"]
+requires = ["python3"]
+
+[[checks]]
+id = "ruff"
+name = "ruff lint"
+kind = "lint"
+order = 60
+run = "ruff check --output-format concise --no-cache ."
+requires = ["ruff"]
+
+[[checks]]
+id = "mypy"
+name = "mypy type check"
+kind = "static"
+order = 70
+run = "mypy --ignore-missing-imports --no-error-summary --cache-dir=/tmp/oh-mypy ."
+requires = ["mypy"]
+required = false
+
+[[checks]]
+id = "pytest"
+name = "pytest"
+kind = "test"
+order = 40
+run = "sh \"$OH_PACKS/languages/scripts/pytest.sh\""
+requires = ["python3"]

@@ -1,0 +1,12 @@
+id = "nodejs"
+name = "Node.js API documentation"
+version = "v22 (latest-v22.x)"
+license = "MIT"
+redistributable = true
+homepage = "https://nodejs.org/docs/latest-v22.x/api/"
+verified = false
+notes = "all.json is the whole API reference in one machine-readable file. Match the major version to the Node you run."
+
+[[sources]]
+url = "https://nodejs.org/dist/latest-v22.x/docs/api/all.json"
+format = "json"

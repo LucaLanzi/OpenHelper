@@ -1,0 +1,13 @@
+id = "fprime"
+name = "F Prime (F´) flight software framework documentation"
+version = "devel"
+license = "Apache-2.0"
+redistributable = true
+homepage = "https://fprime.jpl.nasa.gov"
+verified = false
+notes = "Pin a release tag that matches the F´ version your projects use."
+
+[[sources]]
+url = "https://github.com/nasa/fprime/archive/refs/heads/devel.tar.gz"
+format = "tar"
+subdir = "docs"

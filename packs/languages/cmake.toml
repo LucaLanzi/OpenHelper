@@ -1,0 +1,57 @@
+id = "cmake"
+name = "CMake"
+detect = ["CMakeLists.txt", "**/CMakeLists.txt", "**/*.cmake"]
+source_globs = ["**/CMakeLists.txt", "**/*.cmake"]
+test_globs = []
+docs = ["cmake"]
+hallucination_patterns = [
+  "Unknown CMake command",
+  "Could not find a package configuration file",
+  "Cannot find source file",
+  "Unknown arguments specified",
+]
+
+[lsp]
+command = "neocmakelsp"
+args = ["--stdio"]
+
+[[checks]]
+id = "configure-build"
+name = "Configure (warnings as errors) and build"
+kind = "build"
+order = 10
+when_files = ["CMakeLists.txt"]
+run = "cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON --warn-uninitialized -Werror=dev && cmake --build build -j"
+requires = ["cmake"]
+timeout_s = 1800
+
+[[checks]]
+id = "ctest"
+name = "ctest"
+kind = "test"
+order = 20
+when_files = ["CMakeLists.txt"]
+run = "sh \"$OH_PACKS/languages/scripts/ctest.sh\" build"
+requires = ["ctest"]
+timeout_s = 1800
+
+[[checks]]
+id = "sanitizers"
+name = "ASan + UBSan build and tests"
+kind = "test"
+order = 30
+when_files = ["CMakeLists.txt"]
+run = "cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' && cmake --build build-asan -j && sh \"$OH_PACKS/languages/scripts/ctest.sh\" build-asan"
+requires = ["cmake", "ctest"]
+required = false
+timeout_s = 3600
+
+[[checks]]
+id = "cmake-lint"
+name = "cmake-lint"
+kind = "lint"
+order = 60
+run = "cmake-lint {files}"
+files = ["**/CMakeLists.txt", "**/*.cmake"]
+requires = ["cmake-lint"]
+required = false
