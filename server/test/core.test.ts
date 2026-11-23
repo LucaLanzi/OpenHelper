@@ -462,6 +462,30 @@ describe("implement", () => {
     expect(prompts[1]).toContain("def add(a, b):");
     expect(prompts[1]).not.toContain("TOP-SECRET");
   });
+  it("applies an edit with no path line to the plan's only file, and repairs with the task in view", async () => {
+    tempWorkspace();
+    const repo = samplePythonRepo();
+    let calls = 0;
+    const sandbox: Sandbox = {
+      driver: "none",
+      // The first checks fail so a repair runs; the second pass is clean.
+      run: async (cmd) => ({ code: cmd.startsWith("command -v") || calls > 1 ? 0 : 1, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
+    };
+    const prompts: string[] = [];
+    const noPath = "<<<<<<< SEARCH\ndef add(a, b):\n    return a + b\n=======\ndef add(a, b):\n    return a + b\n\n\ndef sub(a, b):\n    return a - b\n>>>>>>> REPLACE\n";
+    const ctx = implementCtx(repo, sandbox, (m) => {
+      prompts.push(m);
+      calls++;
+      return calls === 1 ? noPath : "No change needed.";
+    });
+    const logs: string[] = [];
+    ctx.log = (l) => logs.push(l);
+    const out = await implement(ctx, "Add a sub function\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
+    expect(logs).toContain("edit with no file path: using calc/ops.py (the only file in the plan)");
+    expect(out.best?.diff).toContain("+def sub(a, b):");
+    expect(prompts[1]).toContain("Add a sub function");
+    expect(prompts[1]).toContain("calc/ops.py\n```\ndef add(a, b):");
+  });
 });
 
 describe("evals", () => {
