@@ -53,7 +53,7 @@ Setup
   plan [--tier XS|S|M|L|XL]       show the tier, models and disk this machine needs
   llama-swap-config [--server P]  write workspace/llama-swap.yaml from the registry and platform file
   models list                     list model packs and whether their files are present
-  models pin ID --file PATH       record a downloaded model's file name and SHA-256
+  models pin ID --file PATH [--url URL]  record a downloaded model's file name, source and SHA-256
   models path ID                  print where the model file is expected
   token                           print this machine's API token (for the dashboard login)
 
@@ -172,7 +172,9 @@ async function main() {
         const m = findModel(id);
         out(`hashing ${file} …`);
         const sha = await sha256File(file);
-        const override = { ...m, sha256: sha, source: { ...m.source, filename: basename(file) } };
+        // Recording where the file came from lets another machine download the same bytes.
+        const url = str(a, "url", m.source.url);
+        const override = { ...m, sha256: sha, source: { ...m.source, filename: basename(file), url } };
         writeFileAtomic(join(ws.packs(), "models", `${id}.toml`), toToml(override as unknown as Record<string, unknown>));
         out(`pinned ${id}: ${sha}\n(workspace/packs/models/${id}.toml; move the file to ${modelFile(override)} if it is elsewhere)`);
         return;

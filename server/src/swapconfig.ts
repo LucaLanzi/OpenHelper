@@ -3,6 +3,11 @@ import { stringify as toYaml } from "yaml";
 import { ws } from "./core/paths.js";
 import type { ModelPack, Platform } from "./core/schemas.js";
 
+/** llama-swap splits cmd with POSIX shell rules; quote paths that need it. */
+function shq(s: string): string {
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
 export function modelsDir(): string {
   return process.env.OPENHELPER_MODELS ?? join(ws.root(), "models");
 }
@@ -22,10 +27,10 @@ export function llamaSwapConfig(platform: Platform, models: ModelPack[], llamaSe
   for (const m of offered) {
     const o = platform.model_overrides[m.id];
     const args = [
-      llamaServer,
+      shq(llamaServer),
       "--host 127.0.0.1",
       "--port ${PORT}",
-      `-m ${JSON.stringify(modelFile(m))}`,
+      `-m ${shq(modelFile(m))}`,
       `-c ${o?.ctx ?? m.ctx_default}`,
       "-ngl 999",
       // MoE on a discrete GPU: keep experts in RAM until `make tune` finds how many fit in VRAM.
