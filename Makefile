@@ -11,7 +11,7 @@ OH := node server/dist/cli.js
 PROFILE ?= auto
 
 .PHONY: help install prereqs setup init detect plan build typecheck test lint-scripts check-all dev serve mock-llm \
-        llama-swap-config sandbox-image install-service token download-model tune bench mac-gpu-limit \
+        llama-swap-config sandbox-vm sandbox-image install-service token download-model tune bench mac-gpu-limit \
         add-project docs-list docs-fetch index mine-evals eval models pin audit clean
 
 help: ## Show this help
@@ -60,7 +60,10 @@ bench: ## Benchmark one model file (MODEL_FILE=path)
 mac-gpu-limit: ## macOS: raise the GPU memory limit for large models (asks first)
 	./scripts/mac-gpu-limit.sh
 
-sandbox-image: ## Build the sandbox image generated code runs in (docker or podman)
+sandbox-vm: ## Set up the sandbox: Lima VM + image on macOS, image on Linux; smoke-tests it (STOP=1 stops the VM)
+	./scripts/sandbox-vm.sh
+
+sandbox-image: ## Build only the sandbox image (docker or podman)
 	$(or $(shell command -v podman),docker) build -t openhelper-sandbox:latest sandbox
 
 install-service: build ## Install and start the model server and engine as user services

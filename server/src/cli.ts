@@ -81,13 +81,22 @@ async function main() {
       if (existsSync(join(dest, "config.toml"))) {
         out(`workspace already exists at ${dest}; leaving it alone`);
       } else {
-        cpSync(join(repoRoot(), "workspace.example"), dest, { recursive: true });
-        const cfg = readText(join(dest, "config.toml")).replace(/^self\s*=.*$/m, `self = "${platform}"`);
+        const example = join(repoRoot(), "workspace.example");
+        cpSync(example, dest, { recursive: true, filter: (src) => !src.startsWith(join(example, "platforms")) });
+        // One machine to start with: both workflow aliases point at it, and only its platform file
+        // is created. Add other machines later (docs/SETUP.md, "A second machine").
+        const onMac = process.platform === "darwin";
+        let cfg = readText(join(dest, "config.toml"))
+          .replace(/^self\s*=.*$/m, `self = "${platform}"`)
+          .replace(/^plan\s*=.*$/m, `plan = "${platform}"`)
+          .replace(/^build\s*=.*$/m, `build = "${platform}"`);
+        // Prompt processing is the slow part on Apple Silicon, so retrieve fewer passages.
+        if (onMac) cfg = cfg.replace(/^retrieval_top_k\s*=.*$/m, "retrieval_top_k = 5");
         writeFileAtomic(join(dest, "config.toml"), cfg);
-        if (!existsSync(join(dest, "platforms", `${platform}.toml`))) {
-          const tmpl = readText(join(dest, "platforms", "desktop.toml")).replace(/name = "desktop"/, `name = "${platform}"`);
-          writeFileAtomic(join(dest, "platforms", `${platform}.toml`), tmpl);
-        }
+        const template = existsSync(join(example, "platforms", `${platform}.toml`))
+          ? readText(join(example, "platforms", `${platform}.toml`))
+          : readText(join(example, "platforms", onMac ? "mac.toml" : "desktop.toml")).replace(/^name = ".*"$/m, `name = "${platform}"`);
+        writeFileAtomic(join(dest, "platforms", `${platform}.toml`), template.replace(/^url = ".*"$/m, 'url = "http://127.0.0.1:8740"'));
         out(`created workspace at ${dest} for platform "${platform}"`);
       }
       ensureApiToken();

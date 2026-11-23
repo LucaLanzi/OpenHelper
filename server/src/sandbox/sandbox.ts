@@ -99,8 +99,8 @@ class ContainerSandbox implements Sandbox {
 }
 
 /**
- * macOS: a Lima VM running containerd. The worktree must be under a writable Lima mount
- * (the workspace is, by default; see docs/SANDBOX.md).
+ * macOS: a Lima VM running rootless containerd (Lima's default template). The worktree must be
+ * under a writable Lima mount: `make sandbox-vm` mounts your home folder writable.
  */
 class LimaSandbox implements Sandbox {
   driver = "lima" as const;
@@ -109,7 +109,7 @@ class LimaSandbox implements Sandbox {
     private image: string,
   ) {}
   run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
-    const args = ["shell", this.vm, "--", "sudo", "nerdctl", "run", "--rm", "--network", "none", "-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`];
+    const args = ["shell", this.vm, "--", "nerdctl", "run", "--rm", "--network", "none", "-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`];
     for (const p of o.readOnly ?? []) args.push("-v", `${p}:${p}:ro`);
     args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", this.image, "sh", "-c", cmd);
     return exec("limactl", args, cwd, baseEnv({}), o.timeoutMs);

@@ -2,6 +2,16 @@
 
 Generated code is built, tested and linted inside a sandbox with networking off. Only the worktree is mounted read-write; the packs and (for `node_modules` links) the source repo are read-only. `auto_run = true` in a platform file is refused unless a sandbox driver is set.
 
+## Quick setup
+
+```bash
+make sandbox-vm
+```
+
+On macOS this creates a Lima VM named `openhelper` (4 CPUs, 3 GiB memory, your home folder mounted writable), builds the sandbox image inside it, checks that a container has no network, and offers to switch your platform file to `driver = "lima"`. On Linux it builds the image with Podman or Docker and does the same. Stop the VM to free its memory for a model with `make sandbox-vm STOP=1`. Sizes: `VM_CPUS`, `VM_MEMORY`, `VM_DISK`.
+
+The sections below are what it does, if you'd rather do it by hand.
+
 ## Linux: Docker or Podman
 
 ```bash
@@ -24,10 +34,12 @@ The image (`sandbox/Dockerfile`) has GCC, Clang, clang-tidy, cppcheck, CMake, Py
 
 ```bash
 brew install lima
-limactl create --name=openhelper --mount-writable template://default
+limactl create --name=openhelper --tty=false --mount-writable --cpus=4 --memory=3 template:default
 limactl start openhelper
-limactl shell openhelper -- sudo nerdctl build -t openhelper-sandbox:latest - < sandbox/Dockerfile
+limactl shell openhelper -- nerdctl build -t openhelper-sandbox:latest "$PWD/sandbox"
 ```
+
+Lima's default template runs containerd rootless, so `nerdctl` runs without `sudo`.
 
 The worktrees live under `workspace/worktrees/`, which must be inside a writable Lima mount (your home folder is, with `--mount-writable`). Then:
 
