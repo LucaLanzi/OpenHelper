@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenHelper model server (llama-swap, localhost only)
+After=network.target
+
+[Service]
+ExecStart=@SWAP@ --config @WS@/llama-swap.yaml --listen 127.0.0.1:@PORT@
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

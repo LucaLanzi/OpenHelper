@@ -50,6 +50,7 @@ Setup
   llama-swap-config [--server P]  write workspace/llama-swap.yaml from the registry and platform file
   models list                     list model packs and whether their files are present
   models pin ID --file PATH       record a downloaded model's file name and SHA-256
+  models path ID                  print where the model file is expected
   token                           print this machine's API token (for the dashboard login)
 
 Projects
@@ -141,6 +142,10 @@ async function main() {
           const f = modelFile(m);
           out(`${m.id.padEnd(28)} ${String(m.size_gb).padStart(5)} GB  ${m.roles.join(",").padEnd(16)} ${existsSync(f) ? "present" : "missing"}  ${m.sha256 ? "pinned" : "unpinned"}`);
         }
+        return;
+      }
+      if (sub === "path") {
+        out(modelFile(findModel(a._[2] ?? "")));
         return;
       }
       if (sub === "pin") {
