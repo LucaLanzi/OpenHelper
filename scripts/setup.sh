@@ -31,18 +31,13 @@ else
     have c++ || missing+=("c++ (build-essential)")
 fi
 if [ "${#missing[@]}" -gt 0 ]; then
-    warn "missing: ${missing[*]}"
-    if [ "$OS" = "macos" ]; then
-        die "install with: xcode-select --install && brew install cmake node@22"
-    else
-        die "install with: sudo apt install -y git cmake build-essential && install Node.js 22 (https://nodejs.org)"
-    fi
+    die "missing: ${missing[*]}. Run \`make prereqs\` (or \`make install\`, which does it all)."
 fi
 node_major="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$node_major" -ge "$(lock_get NODE_MAJOR)" ] || die "Node.js $(lock_get NODE_MAJOR)+ required (found $(node -v))"
+[ "$node_major" -ge "$(lock_get NODE_MAJOR)" ] || die "Node.js $(lock_get NODE_MAJOR)+ required (found $(node -v)); run \`make prereqs\`"
 
 if [ "$PROFILE" = "desktop" ]; then
-    have nvcc || [ -x /usr/local/cuda/bin/nvcc ] || die "CUDA toolkit not found (nvcc). Install it: sudo apt install -y nvidia-cuda-toolkit, or NVIDIA's CUDA 12 packages."
+    have nvcc || [ -x /usr/local/cuda/bin/nvcc ] || die "CUDA toolkit not found (nvcc). Run \`make prereqs\`, or use PROFILE=cpu."
     export PATH="/usr/local/cuda/bin:$PATH"
 fi
 

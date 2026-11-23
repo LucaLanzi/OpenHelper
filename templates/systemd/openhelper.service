@@ -4,6 +4,8 @@ After=openhelper-llm.service
 Wants=openhelper-llm.service
 
 [Service]
+# systemd user services start with a minimal PATH; use the one from install time.
+Environment=PATH=@PATH@
 Environment=OPENHELPER_ROOT=@ROOT@
 Environment=OPENHELPER_WORKSPACE=@WS@
 WorkingDirectory=@ROOT@

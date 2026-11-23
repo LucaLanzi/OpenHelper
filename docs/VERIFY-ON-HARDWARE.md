@@ -12,6 +12,7 @@ Everything in this repo was built and tested in a cloud workspace against a mock
 
 | Item | Why it is unverified | How to verify |
 | --- | --- | --- |
+| `make install` package installation (apt, Homebrew, Node.js tarball, CUDA toolkit) | Only dry-run here as a normal user without apt; nodejs.org and Homebrew were unreachable | `make install` on each machine |
 | llama.cpp build with CUDA (2080 Ti, compute 7.5) and Metal | No GPU in the build environment | `make setup` on each machine |
 | llama-swap release download and config format (groups, `ttl`, `${PORT}`) | Could not reach GitHub releases from the build environment | `make setup`, then `make install-service`, then `curl 127.0.0.1:8741/v1/models` |
 | `--cpu-moe` / `--n-cpu-moe` flags and their speed | Need the GPU | `make tune ID=qwen3.6-35b-a3b-q4km` |
@@ -24,8 +25,9 @@ Everything in this repo was built and tested in a cloud workspace against a mock
 
 ## Desktop (Ubuntu 24.04, 2080 Ti)
 
-- [ ] `nvidia-smi` shows the 2080 Ti; `nvcc --version` works
-- [ ] `make setup PROFILE=desktop` completes; `vendor/llama.cpp/build/bin/llama-server --version` runs
+- [ ] `nvidia-smi` shows the 2080 Ti
+- [ ] `make install` completes: packages, Node.js 22, the CUDA toolkit (`nvcc --version` works), check tools, Podman
+- [ ] `make setup PROFILE=desktop` completes (`make install` already ran it); `vendor/llama.cpp/build/bin/llama-server --version` runs
 - [ ] `make plan` shows tier M with about 35 GB usable
 - [ ] Download the main model and the light model; `make models` shows them present and pinned
 - [ ] `make tune ID=qwen3.6-35b-a3b-q4km`; record the best `n_cpu_moe` in `workspace/platforms/desktop.toml`; `make llama-swap-config`
@@ -39,7 +41,7 @@ Everything in this repo was built and tested in a cloud workspace against a mock
 
 ## Mac (M1 Pro, 32 GB)
 
-- [ ] `make setup PROFILE=mac` completes with Metal
+- [ ] `make install` completes on macOS (Command Line Tools, Homebrew packages, Lima) and builds with Metal
 - [ ] `make mac-gpu-limit` if the plan warns
 - [ ] Download the 27B dense model and the 35B-A3B MoE; bench both; keep the faster one that scores as well on the eval
 - [ ] `brew install lima`; create the VM (docs/SANDBOX.md); set `[sandbox] driver = "lima"`

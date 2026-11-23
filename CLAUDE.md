@@ -16,7 +16,7 @@ You are setting up this repo on a new machine for its owner. Follow the steps in
 - `workspace/` is the owner's private data. Never commit it, and never copy secrets out of it.
 
 ### Steps
-1. `make setup` (or `PROFILE=desktop|mac|cpu`). It checks prerequisites and tells you what is missing: show that to the owner rather than installing system packages yourself. It builds llama.cpp for the right backend, installs llama-swap and the engine, creates `workspace/`, and prints the plan.
+1. Ask the owner before installing system packages, then run `make install` (it asks for sudo itself; do not run it as root). It installs build tools, Node.js 22, the CUDA toolkit on NVIDIA machines, the check tools and an optional sandbox runtime, then runs `make setup` (`PROFILE=desktop|mac|cpu` to override). If the owner prefers to install packages themselves, run `make setup` alone; it lists what is missing. GPU drivers are never installed for them: if `nvidia-smi` fails, tell the owner.
 2. Read the plan. It shows the memory tier, the models that fit, disk needed and download size. Show it to the owner and wait for approval.
 3. Stop if free disk is below the plan's figure. The plan already includes a 20% margin.
 4. For each model the owner approves: `make download-model ID=<id>`. If the pack has no source yet, ask the owner which GGUF file to use and pass `URL=`.

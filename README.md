@@ -35,7 +35,8 @@ Smaller and larger machines work too: setup measures your memory and picks a tie
 
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git && cd OpenHelper
-make setup                     # builds llama.cpp + llama-swap + the engine, creates workspace/, prints the plan
+make install                   # system packages (asks for sudo), then builds llama.cpp + llama-swap + the engine,
+                               # creates workspace/ and prints the plan. YES=1 answers every question with yes.
 make download-model ID=...     # each model the plan lists (asks first, pins the SHA-256)
 make install-service           # model server + engine as user services
 make token                     # paste this into the dashboard at http://127.0.0.1:8740

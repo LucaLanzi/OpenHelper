@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 OH := node server/dist/cli.js
 PROFILE ?= auto
 
-.PHONY: help setup init detect plan build typecheck test lint-scripts check-all dev serve mock-llm \
+.PHONY: help install prereqs setup init detect plan build typecheck test lint-scripts check-all dev serve mock-llm \
         llama-swap-config sandbox-image install-service token download-model tune bench mac-gpu-limit \
         add-project docs-list docs-fetch index mine-evals eval models pin audit clean
 
@@ -14,6 +14,13 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-18s\033[0m %s\n", $$1, $$2}'
 
 # --- setting up a machine ----------------------------------------------------------------
+install: ## Everything for a new machine: system packages, then setup (YES=1 for no questions)
+	./scripts/install-prereqs.sh
+	./scripts/setup.sh $(PROFILE)
+
+prereqs: ## Install system packages only: build tools, Node.js 22, CUDA, check tools, sandbox
+	./scripts/install-prereqs.sh
+
 setup: ## Build llama.cpp + llama-swap + engine for this machine (PROFILE=auto|desktop|mac|cpu)
 	./scripts/setup.sh $(PROFILE)
 

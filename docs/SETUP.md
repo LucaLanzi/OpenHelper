@@ -4,6 +4,8 @@ This guide covers one machine, then adding a second, then reaching the dashboard
 
 ## Before you start
 
+`make install` installs everything in this table for you (Ubuntu/Debian with apt, or macOS with Homebrew), asking before each optional or large item. To install only the packages, run `make prereqs`. Options: `YES=1` (no questions), `SKIP_APT=1`, `SKIP_CUDA=1`, `SKIP_SANDBOX=1`.
+
 | | Linux (desktop) | macOS (Apple Silicon) |
 | --- | --- | --- |
 | Packages | `git cmake build-essential curl` | Xcode Command Line Tools, `brew install cmake node@22` |
@@ -16,10 +18,10 @@ This guide covers one machine, then adding a second, then reaching the dashboard
 
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git && cd OpenHelper
-make setup
+make install
 ```
 
-`make setup` picks a profile (`desktop` with an NVIDIA GPU, `mac` on Apple Silicon, `cpu` otherwise), builds llama.cpp and llama-swap, builds the engine, creates `workspace/` and prints a plan like:
+`make install` first installs the packages above (it never installs GPU drivers; if `nvidia-smi` fails it tells you to run `sudo ubuntu-drivers install`). Then it runs `make setup`, which picks a profile (`desktop` with an NVIDIA GPU, `mac` on Apple Silicon, `cpu` otherwise), builds llama.cpp and llama-swap, builds the engine, creates `workspace/` and prints a plan like:
 
 ```
 Usable model memory: 35 GB  →  tier M (reference baseline: 2080 Ti desktop, 32 GB M1 Mac)

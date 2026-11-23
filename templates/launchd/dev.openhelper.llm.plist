@@ -9,6 +9,10 @@
     <string>--config</string><string>@WS@/llama-swap.yaml</string>
     <string>--listen</string><string>127.0.0.1:@PORT@</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>@PATH@</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>@WS@/logs/llm.log</string>

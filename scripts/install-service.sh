@@ -15,7 +15,7 @@ port="$(sed -n 's/^llm_url *= *"http:\/\/127.0.0.1:\([0-9]*\)".*/\1/p' "$OH_WS/c
 port="${port:-8741}"
 
 render() {
-    sed -e "s#@ROOT@#$OH_ROOT#g" -e "s#@WS@#$OH_WS#g" -e "s#@NODE@#$NODE#g" -e "s#@SWAP@#$SWAP#g" -e "s#@PORT@#$port#g" "$1"
+    sed -e "s#@ROOT@#$OH_ROOT#g" -e "s#@WS@#$OH_WS#g" -e "s#@NODE@#$NODE#g" -e "s#@SWAP@#$SWAP#g" -e "s#@PORT@#$port#g" -e "s#@PATH@#$PATH#g" "$1"
 }
 
 case "$(os_name)" in
