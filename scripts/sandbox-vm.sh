@@ -43,8 +43,9 @@ set_driver() {  # set_driver <driver>
     fi
 }
 
+smoke_opts=()
 smoke() {  # smoke <command prefix...>: run a container with no network and check the tools
-    "$@" run --rm --network none ${SMOKE_OPTS:-} "$IMAGE" sh -c \
+    "$@" run --rm --network none ${smoke_opts[@]+"${smoke_opts[@]}"} "$IMAGE" sh -c \
         'python3 -m pytest --version >/dev/null && cmake --version | head -n1 && node -v && shellcheck --version | sed -n 2p && (getent hosts example.com >/dev/null && echo "NETWORK REACHABLE" || echo "network: off")'
 }
 
@@ -87,7 +88,7 @@ macos() {
     ok "${nerdctl[*]} works"
     if [ "${nerdctl[0]}" = sudo ]; then
         "$OH_ROOT/scripts/lima-apparmor.sh" "$VM"
-        SMOKE_OPTS="--security-opt apparmor=openhelper-sandbox"
+        smoke_opts=(--security-opt apparmor=openhelper-sandbox)
     fi
 
     b "3/4 Sandbox image"
