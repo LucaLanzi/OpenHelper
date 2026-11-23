@@ -319,7 +319,10 @@ export class WorkflowEngine {
         const best = o.best as { diff?: string; branch?: string; confidence?: { status: string; reasons: string[] }; checks?: { language: string; id: string; status: string }[] } | undefined;
         run.vars.patch = best?.diff ?? "";
         run.vars.branch = best?.branch ?? "";
-        run.vars.checks = (best?.checks ?? []).map((c) => `${c.language}/${c.id}: ${c.status}`).join("\n");
+        run.vars.checks = [
+          ...(best?.confidence ? [`Status: ${best.confidence.status} (${best.confidence.reasons.join("; ")})`] : []),
+          ...(best?.checks ?? []).map((c) => `${c.language}/${c.id}: ${c.status}`),
+        ].join("\n");
         run.vars[st.id] = run.vars.patch;
         st.summary = best ? `${best.confidence?.status ?? "?"} on branch ${best.branch}` : "no candidate";
         break;

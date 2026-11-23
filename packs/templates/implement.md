@@ -9,7 +9,8 @@ Relevant files and context (passages are labelled [S1], [S2] ...):
 Rules:
 - Change only what the plan needs. Do not invent APIs, flags, packages or files; if something you
   need is not in the context, say so in one line at the end instead of guessing.
-- Express every change as search/replace blocks. The file path goes on its own line, then:
+- Express every change as search/replace blocks. Every block starts with the file's path on its own line:
+path/to/file.py
 <<<<<<< SEARCH
 exact lines currently in the file (copy them exactly, enough to be unique)
 =======

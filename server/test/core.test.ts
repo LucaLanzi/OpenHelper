@@ -18,8 +18,8 @@ import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
 import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack, infoToText } from "../src/index/docs.js";
-import { implement } from "../src/agent/agents.js";
-import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
+import { implement, review } from "../src/agent/agents.js";
+import { filesFromPlan, retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
 import { JobQueue } from "../src/jobs/queue.js";
 import { runChecks } from "../src/checks/runner.js";
@@ -548,6 +548,28 @@ describe("evals", () => {
     for (const label of ["File path: calc/ops.py", "**File path:** `calc/ops.py`", "file: calc/ops.py", "`calc/ops.py`:"]) {
       expect(parseEditBlocks(`${label}\n<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n`)[0]?.path).toBe("calc/ops.py");
     }
+  });
+  it("gives a block with no path line the path of the block before it", () => {
+    const blocks = parseEditBlocks("calc/ops.py\n<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nc\n=======\nd\n>>>>>>> REPLACE\n");
+    expect(blocks.map((b) => b.path)).toEqual(["calc/ops.py", "calc/ops.py"]);
+  });
+  it("finds files a plan writes in bold", () => {
+    const repo = samplePythonRepo();
+    const files = filesFromPlan("## Files to change\n- **calc/ops.py**: add it\n- **tests/test_ops.py**: test it\n\n## Steps\n1. Go", repo);
+    expect(files.map((f) => f.path)).toEqual(["calc/ops.py", "tests/test_ops.py"]);
+  });
+});
+
+describe("review", () => {
+  const approves = () => implementCtx("/nowhere", { driver: "none", run: async () => ({ code: 0, output: "", timed_out: false, duration_ms: 0 }) }, () => "## Verdict\napprove, looks right.");
+  it("does not let the model approve an empty patch", async () => {
+    tempWorkspace();
+    expect((await review(approves(), "plan", "", "python/pytest: pass")).verdict).toBe("changes needed");
+  });
+  it("does not let the model approve a change with failed checks", async () => {
+    tempWorkspace();
+    expect((await review(approves(), "plan", "+x", "Status: red (1 edit(s) could not be applied)\npython/pytest: pass")).verdict).toBe("changes needed");
+    expect((await review(approves(), "plan", "+x", "Status: green (all checks passed)")).verdict).toBe("approve");
   });
 });
 

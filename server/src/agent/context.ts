@@ -78,7 +78,8 @@ export function formatPassages(ps: Passage[], maxChars = 24_000): string {
 
 /** Files a plan names under "Files to change", read from the worktree (scrubbed, size-capped). */
 export function filesFromPlan(plan: string, root: string, maxFiles = 6, maxBytes = 40_000): { path: string; content: string }[] {
-  const section = /##\s*Files to change([\s\S]*?)(\n##\s|$)/i.exec(plan)?.[1] ?? plan;
+  // Models often write paths in bold, which would hide them from the pattern below.
+  const section = (/##\s*Files to change([\s\S]*?)(\n##\s|$)/i.exec(plan)?.[1] ?? plan).replace(/\*/g, "");
   const paths = new Set<string>();
   for (const m of section.matchAll(/`([^`\s]+\.[A-Za-z0-9]+)`|(?:^|\s)([\w./-]+\/[\w.-]+\.[A-Za-z0-9]+|[\w-]+\.(?:py|cpp|cc|c|h|hpp|ts|tsx|js|mjs|sh|cmake|mk|txt|md|toml|json|yaml))(?=[\s:,)]|$)/gm)) {
     const p = (m[1] ?? m[2] ?? "").replace(/^\.\//, "");

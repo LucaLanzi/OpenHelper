@@ -212,7 +212,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
       ...editErrors.map((e) => `edit error: ${e}`),
       ...failed.map((r) => `### ${r.language}/${r.id} (${r.status})\n${tail(r.output, 3000)}`),
     ].join("\n\n");
-    const current = [...new Set([...touched, ...missed])]
+    const current = [...new Set([...touched, ...missed, ...files.map((f) => f.path)])]
       .slice(0, 8)
       .map((p) => {
         try {
@@ -222,7 +222,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
         }
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
-    reply = await ask(ctx, "repair", render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
+    reply = await ask(ctx, "repair", render(loadTemplate("repair"), { plan: planText, checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
     editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -270,6 +270,7 @@ export interface ReviewOutput {
 }
 
 export async function review(ctx: AgentContext, planText: string, patch: string, checks: string): Promise<ReviewOutput> {
+  if (!patch.trim()) return { review: "## Verdict\nchanges needed: the implement step produced no changes.", verdict: "changes needed" };
   const prompt = render(loadTemplate("review"), {
     project: ctx.project.name,
     plan: planText,
@@ -278,5 +279,7 @@ export async function review(ctx: AgentContext, planText: string, patch: string,
   });
   const text = await ask(ctx, "review", prompt);
   const v = /##\s*Verdict\s*\n+\s*\**\s*(approve|changes needed)/i.exec(text)?.[1]?.toLowerCase();
+  // Failed checks outrank the model's opinion.
+  if (v === "approve" && /^Status: red/m.test(checks)) return { review: text, verdict: "changes needed" };
   return { review: text, verdict: v === "approve" ? "approve" : v === "changes needed" ? "changes needed" : "unclear" };
 }

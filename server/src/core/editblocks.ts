@@ -39,7 +39,9 @@ export function parseEditBlocks(text: string): EditBlock[] {
     // The path is the nearest non-empty line above, without fences or markdown decoration.
     let p = i - 1;
     while (p >= 0 && (lines[p]!.trim() === "" || lines[p]!.trim().startsWith("```"))) p--;
-    const path = p >= 0 ? cleanPath(lines[p]!) : "";
+    const above = p >= 0 && !END.test(lines[p]!) ? cleanPath(lines[p]!) : "";
+    // A block straight after another, with no path line, edits the same file.
+    const path = above || (blocks.at(-1)?.path ?? "");
     const search: string[] = [];
     const replace: string[] = [];
     let j = i + 1;
