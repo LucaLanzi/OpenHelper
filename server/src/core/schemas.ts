@@ -73,13 +73,19 @@ export const LanguagePack = z.object({
 });
 export type LanguagePack = z.infer<typeof LanguagePack>;
 
-export const DocSource = z.object({
+const DocSourceFields = {
   url: z.string().url(),
   sha256: z.string().regex(/^([a-f0-9]{64})?$/).default(""),
   /** tar covers .tar.gz/.tar.xz/.tar.bz2; single files are indexed directly. */
   format: z.enum(["tar", "zip", "html", "markdown", "json", "text"]),
-  /** Only index files under this path inside the archive. */
+  /** Only index this folder or file inside the archive. */
   subdir: z.string().default(""),
+};
+
+export const DocSource = z.object({
+  ...DocSourceFields,
+  /** Tried in order when the main URL cannot be fetched, e.g. a release tarball on a mirror. */
+  alternatives: z.array(z.object(DocSourceFields)).default([]),
 });
 
 export const DocPack = z.object({

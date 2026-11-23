@@ -9,3 +9,15 @@ verified = false
 [[sources]]
 url = "https://www.gnu.org/software/make/manual/make.html"
 format = "html"
+
+# When gnu.org cannot be reached, use the release tarball from GNU's mirrors.
+# It carries the manual as Info files (doc/make.info*), which are indexed as text.
+[[sources.alternatives]]
+url = "https://ftpmirror.gnu.org/make/make-4.4.1.tar.gz"
+format = "tar"
+subdir = "doc"
+
+[[sources.alternatives]]
+url = "https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz"
+format = "tar"
+subdir = "doc"

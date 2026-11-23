@@ -74,8 +74,17 @@ redistributable = true
 url = "https://nodejs.org/dist/latest-v22.x/docs/api/all.json"
 format = "json"            # tar, zip, html, markdown, json, text
 sha256 = ""                # empty: recorded on first download, then enforced
-subdir = ""                # for archives: only index this folder
+subdir = ""                # for archives: only index this folder or file
+
+# Optional, tried in order when the URL above cannot be reached (no answer or an HTTP error).
+# A SHA-256 mismatch never falls through to the next one: it stops the fetch.
+[[sources.alternatives]]
+url = "https://mirror.example.org/node-v22-docs.tar.gz"
+format = "tar"
+subdir = "doc/api"
 ```
+
+The GNU packs use this: when gnu.org does not answer, they take the manual from the release tarball on GNU's mirrors (Bash's HTML reference manual, Make's Info files, which are indexed as text).
 
 Alternatives to `sources`: `local_command` (index the output of a command, such as `cmake --help-full`), or `openhelper docs add-local <id> <path>` for docs you downloaded yourself. Doc content is never bundled in this repo.
 

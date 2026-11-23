@@ -33,10 +33,11 @@ export function docStatus(pack: DocPack): { fetched: boolean; files: number; loc
   const dir = docTextDir(pack.id);
   const lock = readJson<Lock>(lockFile(), {});
   const files = existsSync(dir) ? docFiles(dir).length : 0;
-  return { fetched: files > 0, files, locked: pack.sources.every((s) => Boolean(s.sha256 || lock[s.url])) };
+  const lockedOne = (s: { url: string; sha256: string }) => Boolean(s.sha256 || lock[s.url]);
+  return { fetched: files > 0, files, locked: pack.sources.every((s) => lockedOne(s) || (s.alternatives ?? []).some(lockedOne)) };
 }
 
-export async function fetchDocPack(pack: DocPack, log: (s: string) => void = () => {}): Promise<number> {
+export async function fetchDocPack(pack: DocPack, log: (s: string) => void = () => {}, timeoutMs = 30 * 60_000): Promise<number> {
   const root = join(ws.docs(), pack.id);
   const raw = join(root, "raw");
   const text = docTextDir(pack.id);
@@ -52,18 +53,34 @@ export async function fetchDocPack(pack: DocPack, log: (s: string) => void = () 
   }
 
   const lock = readJson<Lock>(lockFile(), {});
-  for (const [i, src] of pack.sources.entries()) {
-    log(`downloading ${src.url}`);
-    const res = await fetch(src.url, { headers: { "user-agent": DOC_FETCH_USER_AGENT }, signal: AbortSignal.timeout(30 * 60_000) });
-    if (!res.ok) throw new Error(`${src.url}: HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    const sha = createHash("sha256").update(buf).digest("hex");
-    const pinned = src.sha256 || lock[src.url]?.sha256;
-    if (pinned && pinned !== sha) throw new Error(`${src.url}: SHA-256 mismatch (expected ${pinned}, got ${sha}); refusing`);
-    if (!pinned) lock[src.url] = { url: src.url, sha256: sha, fetched_at: new Date().toISOString() };
-    const file = join(raw, `${i}-${basename(new URL(src.url).pathname) || "index"}`);
-    writeFileSync(file, buf);
-    extractInto(file, src.format, src.subdir, text);
+  for (const [i, main] of pack.sources.entries()) {
+    const tried: string[] = [];
+    let done = false;
+    for (const src of [main, ...(main.alternatives ?? [])]) {
+      log(`downloading ${src.url}`);
+      let buf: Buffer;
+      try {
+        const res = await fetch(src.url, { headers: { "user-agent": DOC_FETCH_USER_AGENT }, signal: AbortSignal.timeout(timeoutMs) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buf = Buffer.from(await res.arrayBuffer());
+      } catch (e) {
+        // Only an unreachable source moves on to the next one; a bad hash below never does.
+        const why = (e as Error & { cause?: Error }).cause?.message ?? (e as Error).message;
+        tried.push(`${src.url}: ${why}`);
+        log(`could not fetch ${src.url} (${why})`);
+        continue;
+      }
+      const sha = createHash("sha256").update(buf).digest("hex");
+      const pinned = src.sha256 || lock[src.url]?.sha256;
+      if (pinned && pinned !== sha) throw new Error(`${src.url}: SHA-256 mismatch (expected ${pinned}, got ${sha}); refusing`);
+      if (!pinned) lock[src.url] = { url: src.url, sha256: sha, fetched_at: new Date().toISOString() };
+      const file = join(raw, `${i}-${basename(new URL(src.url).pathname) || "index"}`);
+      writeFileSync(file, buf);
+      extractInto(file, src.format, src.subdir, text);
+      done = true;
+      break;
+    }
+    if (!done) throw new Error(`could not fetch any source for ${pack.id}:\n  ${tried.join("\n  ")}`);
   }
   writeFileAtomic(lockFile(), JSON.stringify(lock, null, 2));
   return docFiles(text).length;
@@ -110,22 +127,40 @@ function walkTop(dir: string): string[] {
 }
 
 const TEXT_EXT = new Set([".md", ".mdx", ".rst", ".txt", ".adoc"]);
+/** GNU Info files: make.info, make.info-1, ... Release tarballs ship the manual this way. */
+const INFO = /\.info(-\d+)?$/;
 
 function convertTree(from: string, to: string): void {
   if (statSync(from).isFile()) {
-    cpSync(from, join(to, basename(from)));
+    convertFile(from, join(to, basename(from)));
     return;
   }
   for (const rel of walkFiles(from, { ignoreDirs: [".git", "node_modules"], maxFileBytes: 4 * 1024 * 1024 })) {
-    const ext = extname(rel).toLowerCase();
-    const src = join(from, rel);
-    const dest = join(to, rel);
-    if (ext === ".html" || ext === ".htm") {
-      ensureDir(join(dest, ".."));
-      writeFileSync(`${dest}.md`, htmlToText(readFileSync(src, "utf8")));
-    } else if (TEXT_EXT.has(ext)) {
-      ensureDir(join(dest, ".."));
-      cpSync(src, dest);
-    }
+    convertFile(join(from, rel), join(to, rel));
   }
+}
+
+function convertFile(src: string, dest: string): void {
+  const ext = extname(src).toLowerCase();
+  if (ext === ".html" || ext === ".htm") {
+    ensureDir(join(dest, ".."));
+    writeFileSync(`${dest}.md`, htmlToText(readFileSync(src, "utf8")));
+  } else if (TEXT_EXT.has(ext)) {
+    ensureDir(join(dest, ".."));
+    cpSync(src, dest);
+  } else if (INFO.test(src)) {
+    ensureDir(join(dest, ".."));
+    writeFileSync(`${dest}.txt`, infoToText(readFileSync(src, "utf8")));
+  }
+}
+
+/** Drops Info's node separators and tag tables, keeping the manual's text. */
+export function infoToText(info: string): string {
+  return info
+    .split("\x1f")
+    .filter((part) => !/^\s*(Tag Table:|End Tag Table|Indirect:)/.test(part))
+    .map((part) => part.replace(/^\s*\nFile: [^\n]*\n/, "\n"))
+    .join("\n")
+    .replace(/\x7f\d+/g, "")
+    .replace(/\n{3,}/g, "\n\n");
 }

@@ -11,13 +11,13 @@ import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
 import { canSend, matrix, withinBudget } from "../src/core/links.js";
 import { loadDocPacks, loadLanguages, loadModels, loadWorkflows } from "../src/core/load.js";
 import type { DocPack, HardwareInfo, ModelPack, Platform } from "../src/core/schemas.js";
-import { Platform as PlatformSchema, Project as ProjectSchema, SandboxConfig, WorkspaceConfig } from "../src/core/schemas.js";
+import { DocPack as DocPackSchema, Platform as PlatformSchema, Project as ProjectSchema, SandboxConfig, WorkspaceConfig } from "../src/core/schemas.js";
 import { scrub, isSecretFile } from "../src/core/scrub.js";
 import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
-import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack } from "../src/index/docs.js";
+import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack, infoToText } from "../src/index/docs.js";
 import { implement } from "../src/agent/agents.js";
 import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
@@ -282,6 +282,48 @@ describe("audit log", () => {
 });
 
 describe("doc packs", () => {
+  it("fall back to a mirror tarball when the main site cannot be reached, and index its Info manual", async () => {
+    const dir = tempWorkspace();
+    write(dir, "src/make-4.4.1/doc/make.info", "This is make.info.\n\x1f\nFile: make.info,  Node: Top\n\nGNU make\n********\n\nThe make utility...\n\x1f\nTag Table:\nNode: Top\x7f123\n\x1f\nEnd Tag Table\n");
+    write(dir, "src/make-4.4.1/doc/make.texi", "@node Top");
+    execFileSync("tar", ["-czf", join(dir, "make.tar.gz"), "-C", join(dir, "src"), "make-4.4.1"]);
+    const tarball = readFileSync(join(dir, "make.tar.gz"));
+    const { createServer } = await import("node:http");
+    const server = createServer((_req, res) => res.writeHead(200).end(tarball));
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as { port: number }).port;
+    try {
+      // Port 9 (discard) is closed on loopback, so the main source fails to connect.
+      const pack = DocPackSchema.parse({
+        id: "make-test",
+        name: "make",
+        version: "4.4.1",
+        license: "GFDL",
+        sources: [{ url: "http://127.0.0.1:9/make.html", format: "html", alternatives: [{ url: `http://127.0.0.1:${port}/make-4.4.1.tar.gz`, format: "tar", subdir: "doc" }] }],
+      });
+      const logs: string[] = [];
+      expect(await fetchDocPack(pack, (l) => logs.push(l), 5000)).toBe(1);
+      expect(logs.some((l) => l.startsWith("could not fetch http://127.0.0.1:9/make.html"))).toBe(true);
+      const text = readFileSync(join(dir, "docs", "make-test", "text", "make.info.txt"), "utf8");
+      expect(text).toContain("The make utility");
+      expect(text).not.toContain("Tag Table");
+      expect(text).not.toMatch(/[\x1f\x7f]/);
+      expect(docStatus(pack).locked).toBe(true);
+      // A wrong hash is a stop, never a reason to try the next source.
+      const pinnedWrong = DocPackSchema.parse({ ...pack, sources: [{ url: `http://127.0.0.1:${port}/a.tar.gz`, format: "tar", sha256: "0".repeat(64), alternatives: [{ url: `http://127.0.0.1:${port}/b.tar.gz`, format: "tar" }] }] });
+      await expect(fetchDocPack(pinnedWrong, () => {}, 5000)).rejects.toThrow(/SHA-256 mismatch/);
+    } finally {
+      server.close();
+    }
+  });
+  it("lists the GNU mirrors as fallbacks", () => {
+    for (const id of ["gnu-bash", "gnu-make"]) {
+      const p = loadDocPacks().find((x) => x.id === id)!;
+      expect(p.sources[0]!.url).toMatch(/^https:\/\/www\.gnu\.org\//);
+      expect(p.sources[0]!.alternatives.map((a) => new URL(a.url).host)).toEqual(["ftpmirror.gnu.org", "mirrors.kernel.org"]);
+    }
+    expect(infoToText("a\x1f\nFile: x.info,  Node: Top\nb\x7f12")).toBe("a\n\nb");
+  });
   it("say who is fetching, since gnu.org refuses Node's default User-Agent", async () => {
     tempWorkspace();
     const { createServer } = await import("node:http");
