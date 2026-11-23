@@ -317,6 +317,21 @@ describe("host sandbox", () => {
       process.env.OPENHELPER_ROOT = REPO_ROOT;
     }
   });
+  it("runs Lima containers under the OpenHelper AppArmor profile with no network", async () => {
+    const dir = tempWorkspace();
+    // A VM with system containerd: plain `nerdctl info` fails, so the engine uses sudo.
+    chmodSync(write(dir, "bin/limactl", '#!/bin/sh\n[ "$4" = nerdctl ] && [ "$5" = info ] && exit 1\nprintf "%s\\n" "$@"\n'), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${join(dir, "bin")}:${path}`;
+    try {
+      const r = await makeSandbox(SandboxConfig.parse({ driver: "lima" })).run("true", dir, { timeoutMs: 5000 });
+      const args = r.output.split("\n");
+      expect(args[args.indexOf("--security-opt") + 1]).toBe("apparmor=openhelper-sandbox");
+      expect(args[args.indexOf("--network") + 1]).toBe("none");
+    } finally {
+      process.env.PATH = path;
+    }
+  });
 });
 
 describe("setup scripts", () => {

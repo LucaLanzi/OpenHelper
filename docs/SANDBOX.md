@@ -39,7 +39,7 @@ limactl start openhelper
 limactl shell openhelper -- nerdctl build -t openhelper-sandbox:latest "$PWD/sandbox"
 ```
 
-Lima's default template runs containerd rootless, so `nerdctl` runs without `sudo`. A VM created with system containerd instead (`--set '.containerd.system = true | .containerd.user = false'`) also works: OpenHelper detects which one the VM has and uses `sudo nerdctl` there.
+Lima's default template runs containerd rootless, so `nerdctl` runs without `sudo`. A VM created with system containerd instead (`--set '.containerd.system = true | .containerd.user = false'`) also works: OpenHelper detects which one the VM has and uses `sudo nerdctl` there. System containerd applies AppArmor, and its default profile stops test runners from signalling their own workers on current Ubuntu kernels, so `make sandbox-vm` also installs a profile called `openhelper-sandbox` (nerdctl's default plus that one rule) with `scripts/lima-apparmor.sh`, and OpenHelper runs containers under it.
 
 The worktrees live under `workspace/worktrees/`, which must be inside a writable Lima mount (your home folder is, with `--mount-writable`). Then:
 

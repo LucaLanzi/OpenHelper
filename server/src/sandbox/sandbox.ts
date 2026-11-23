@@ -129,7 +129,11 @@ class LimaSandbox implements Sandbox {
 
   async run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
     const nerdctl = await this.detect();
-    const args = ["shell", this.vm, "--", ...nerdctl, "run", "--rm", "--network", "none", "-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`];
+    const args = ["shell", this.vm, "--", ...nerdctl, "run", "--rm", "--network", "none"];
+    // System containerd applies AppArmor; its default profile stops test runners signalling their
+    // own workers on current kernels, so use ours (scripts/lima-apparmor.sh). Rootless has no AppArmor.
+    if (nerdctl[0] === "sudo") args.push("--security-opt", "apparmor=openhelper-sandbox");
+    args.push("-v", `${cwd}:/work`, "-v", `${packsDir()}:/oh/packs:ro`);
     for (const p of o.readOnly ?? []) args.push("-v", `${p}:${p}:ro`);
     args.push("-w", "/work", "-e", "OH_PACKS=/oh/packs", "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", this.image, "sh", "-c", cmd);
     return exec("limactl", args, cwd, baseEnv({}), o.timeoutMs);
