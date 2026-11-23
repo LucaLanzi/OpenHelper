@@ -148,7 +148,7 @@ export async function implement(ctx: AgentContext, planText: string, o: Implemen
     const dir = createWorktree(repo, base, branch, `${jobTag}-${n}`);
     ctx.log(`candidate ${n}/${bestOf}: worktree ${dir} on branch ${branch}`);
     try {
-      const c = await oneCandidate(ctx, planText, dir, base, n, bestOf, o.kinds);
+      const c = await oneCandidate(ctx, planText, repo, dir, base, n, bestOf, o.kinds);
       cands.push({ ...c, branch, dir });
       if (o.keepWorktree) await o.keepWorktree(dir, { ...c, branch });
     } catch (e) {
@@ -180,7 +180,7 @@ function failures(c: Candidate): number {
   return c.checks.filter((r) => r.status === "fail" || r.status === "error").length + c.edit_errors.length;
 }
 
-async function oneCandidate(ctx: AgentContext, planText: string, dir: string, base: string, n: number, bestOf: number, kinds?: CheckKind[]) {
+async function oneCandidate(ctx: AgentContext, planText: string, repo: string, dir: string, base: string, n: number, bestOf: number, kinds?: CheckKind[]) {
   const ps = await retrieve(ctx, planText);
   const files = filesFromPlan(planText, dir);
   const context = [formatFiles(files), formatPassages(ps)].filter(Boolean).join("\n\n");
@@ -194,6 +194,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
     ...(kinds?.length ? { kinds } : {}),
     changedFiles: [...touched],
+    readOnly: [repo],
     onProgress: (r) => ctx.log(`check ${r.language}/${r.id}: ${r.status}${r.reason ? ` (${r.reason})` : ""}`),
   });
   let confidence = assess(check.results, { editErrors: editErrors.length });
@@ -222,6 +223,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, dir: string, ba
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
       changedFiles: [...touched],
+      readOnly: [repo],
       onProgress: (r) => ctx.log(`check ${r.language}/${r.id}: ${r.status}`),
     });
     confidence = assess(check.results, { editErrors: editErrors.length });

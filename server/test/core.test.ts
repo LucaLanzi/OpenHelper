@@ -18,8 +18,10 @@ import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
 import { addLocalDocs, docStatus } from "../src/index/docs.js";
-import { makeSandbox } from "../src/sandbox/sandbox.js";
-import { git, REPO_ROOT, tempWorkspace, write } from "./helpers.js";
+import { implement } from "../src/agent/agents.js";
+import type { AgentContext } from "../src/agent/context.js";
+import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
+import { git, REPO_ROOT, samplePythonRepo, tempWorkspace, write } from "./helpers.js";
 
 const desktop: HardwareInfo = {
   os: "linux",
@@ -335,6 +337,38 @@ describe("doc packs", () => {
     const file = write(dir, "big.md", "x".repeat(600 * 1024));
     expect(addLocalDocs("big", file)).toBe(1);
     expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
+  });
+});
+
+describe("implement", () => {
+  it("mounts the source repo read-only for first checks and repairs, so linked dependencies resolve", async () => {
+    tempWorkspace();
+    const repo = samplePythonRepo();
+    const seen: (string[] | undefined)[] = [];
+    const sandbox: Sandbox = {
+      driver: "none",
+      run: async (cmd, _cwd, o) => {
+        if (cmd.startsWith("command -v")) return { code: 0, output: "python3\n", timed_out: false, duration_ms: 0 };
+        seen.push(o.readOnly);
+        return { code: 1, output: "failed", timed_out: false, duration_ms: 0 };
+      },
+    };
+    const content = "calc/ops.py\n<<<<<<< SEARCH\ndef add(a, b):\n=======\ndef add(a, b):  # edited\n>>>>>>> REPLACE\n";
+    const ctx = {
+      config: { retrieval_top_k: 0, repair_attempts: 1 },
+      project: { name: "calc", repos: [repo], languages: ["python"] },
+      llm: { chat: async () => ({ content, prompt_tokens: 0, completion_tokens: 0, duration_ms: 0 }) },
+      model: "m",
+      sandbox,
+      languages: loadLanguages(),
+      log: () => {},
+      signal: new AbortController().signal,
+      usage: { prompt_tokens: 0, completion_tokens: 0 },
+    } as unknown as AgentContext;
+    const out = await implement(ctx, "Edit add\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
+    expect(out.best?.attempts).toBe(2);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.every((r) => r?.[0] === repo)).toBe(true);
   });
 });
 
