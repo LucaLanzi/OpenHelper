@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyFailure, runChecks } from "../checks/runner.js";
 import { assess, countValidCitations, type CheckResult, type ConfidenceReport } from "../core/confidence.js";
-import { applyEditBlocks, parseEditBlocks } from "../core/editblocks.js";
+import { applyEditBlocks, parseEditBlocks, safeJoin } from "../core/editblocks.js";
 import { writeFileAtomic } from "../core/fsutil.js";
 import { commitPaths, createWorktree, diffPaths, headSha, isRepo, removeWorktree } from "../core/git.js";
 import { loadTemplate } from "../core/load.js";
 import { ws } from "../core/paths.js";
 import type { CheckKind } from "../core/schemas.js";
+import { isSecretFile, scrub } from "../core/scrub.js";
 import { render, slugify, tail } from "../core/util.js";
 import { expandHome } from "../index/build.js";
 import type { ChatMessage } from "../llm/client.js";
@@ -188,7 +189,8 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   const temperature = bestOf > 1 ? 0.2 + 0.25 * (n - 1) : 0.2;
   let reply = await ask(ctx, prompt, { temperature });
   const touched = new Set<string>();
-  let editErrors = applyAll(ctx, dir, reply, touched);
+  const missed = new Set<string>();
+  let editErrors = applyAll(ctx, dir, reply, touched, missed);
   let attempts = 1;
   let check = await runChecks(dir, ctx.languages, ctx.sandbox, {
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -207,18 +209,18 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
       ...editErrors.map((e) => `edit error: ${e}`),
       ...failed.map((r) => `### ${r.language}/${r.id} (${r.status})\n${tail(r.output, 3000)}`),
     ].join("\n\n");
-    const current = [...touched]
+    const current = [...new Set([...touched, ...missed])]
       .slice(0, 8)
       .map((p) => {
         try {
-          return { path: p, content: readFileSync(join(dir, p), "utf8").slice(0, 40_000) };
+          return { path: p, content: scrub(readFileSync(join(dir, p), "utf8").slice(0, 40_000)).text };
         } catch {
           return undefined;
         }
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
     reply = await ask(ctx, render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
-    editErrors = applyAll(ctx, dir, reply, touched);
+    editErrors = applyAll(ctx, dir, reply, touched, missed);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
@@ -243,13 +245,15 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   return { n, confidence, checks: check.results, edit_errors: editErrors, attempts, diff, files: changed, hallucination: hall.matches };
 }
 
-function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>): string[] {
+function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>): string[] {
   const blocks = parseEditBlocks(reply);
   if (!blocks.length) return ["the reply contained no search/replace blocks"];
   const out = applyEditBlocks(dir, blocks);
   for (const o of out) {
     ctx.log(`edit ${o.path}: ${o.ok ? "applied" : `failed (${o.error})`}`);
     if (o.ok) touched.add(o.path);
+    // The repair prompt shows these files, so the path comes from the model and must stay inside the worktree.
+    else if (safeJoin(dir, o.path) && !isSecretFile(o.path)) missed.add(o.path);
   }
   return out.filter((o) => !o.ok).map((o) => `${o.path}: ${o.error}`);
 }

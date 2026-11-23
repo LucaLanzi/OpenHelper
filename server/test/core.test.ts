@@ -379,23 +379,46 @@ describe("implement", () => {
       },
     };
     const content = "calc/ops.py\n<<<<<<< SEARCH\ndef add(a, b):\n=======\ndef add(a, b):  # edited\n>>>>>>> REPLACE\n";
-    const ctx = {
-      config: { retrieval_top_k: 0, repair_attempts: 1 },
-      project: { name: "calc", repos: [repo], languages: ["python"] },
-      llm: { chat: async () => ({ content, prompt_tokens: 0, completion_tokens: 0, duration_ms: 0 }) },
-      model: "m",
-      sandbox,
-      languages: loadLanguages(),
-      log: () => {},
-      signal: new AbortController().signal,
-      usage: { prompt_tokens: 0, completion_tokens: 0 },
-    } as unknown as AgentContext;
-    const out = await implement(ctx, "Edit add\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
+    const out = await implement(implementCtx(repo, sandbox, () => content), "Edit add\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
     expect(out.best?.attempts).toBe(2);
     expect(seen.length).toBeGreaterThan(1);
     expect(seen.every((r) => r?.[0] === repo)).toBe(true);
   });
+  it("shows the model a file whose edit failed, but never a path outside the worktree", async () => {
+    const dir = tempWorkspace();
+    write(dir, "worktrees/outside.txt", "TOP-SECRET");
+    const repo = samplePythonRepo();
+    const sandbox: Sandbox = {
+      driver: "none",
+      run: async (cmd) => ({ code: 0, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
+    };
+    const bad = "calc/ops.py\n<<<<<<< SEARCH\nnot in the file\n=======\nx\n>>>>>>> REPLACE\n\n../outside.txt\n<<<<<<< SEARCH\nnope\n=======\nx\n>>>>>>> REPLACE\n";
+    const prompts: string[] = [];
+    const ctx = implementCtx(repo, sandbox, (m) => {
+      prompts.push(m);
+      return bad;
+    });
+    await implement(ctx, "Edit add\n\n## Files to change\n- `notes.txt`", { discardBranches: true });
+    expect(prompts[1]).toContain("def add(a, b):");
+    expect(prompts[1]).not.toContain("TOP-SECRET");
+  });
 });
+
+function implementCtx(repo: string, sandbox: Sandbox, reply: (prompt: string) => string): AgentContext {
+  return {
+    config: { retrieval_top_k: 0, repair_attempts: 1 },
+    project: { name: "calc", repos: [repo], languages: ["python"] },
+    llm: {
+      chat: async (o: { messages: { content: string }[] }) => ({ content: reply(o.messages.at(-1)!.content), prompt_tokens: 0, completion_tokens: 0, duration_ms: 0 }),
+    },
+    model: "m",
+    sandbox,
+    languages: loadLanguages(),
+    log: () => {},
+    signal: new AbortController().signal,
+    usage: { prompt_tokens: 0, completion_tokens: 0 },
+  } as unknown as AgentContext;
+}
 
 describe("model client", () => {
   it("reads chat answers and usage from a stream, so long generations do not time out", async () => {

@@ -52,7 +52,7 @@ export function reply(messages: Msg[]): string {
     const task = /Write a plan for this task:\n([\s\S]*?)\n\nUse only/.exec(user)?.[1] ?? "change";
     return PLAN(task);
   }
-  if (user.includes("Your previous edits were applied, but checks failed")) {
+  if (user.includes("Your previous edits need fixing")) {
     return `calc/ops.py
 <<<<<<< SEARCH
 def div(a, b)
