@@ -3,6 +3,10 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
+# Use a new enough Node.js even if an older one (nvm, Homebrew node@20, apt) comes first on PATH.
+NODE_DIR := $(shell ./scripts/find-node.sh 2>/dev/null)
+export PATH := $(if $(NODE_DIR),$(NODE_DIR):)$(PATH)
+
 OH := node server/dist/cli.js
 PROFILE ?= auto
 
@@ -62,7 +66,8 @@ sandbox-image: ## Build the sandbox image generated code runs in (docker or podm
 install-service: build ## Install and start the model server and engine as user services
 	./scripts/install-service.sh
 
-token: build ## Print this machine's API token (for the dashboard login)
+token: ## Print this machine's API token (for the dashboard login)
+	@test -f server/dist/cli.js || $(MAKE) -s build >/dev/null
 	@$(OH) token
 
 # --- projects -----------------------------------------------------------------------------

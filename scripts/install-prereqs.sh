@@ -6,7 +6,9 @@
 # again any time; anything already installed is left alone.
 #
 #   1. build tools: git, cmake, a C/C++ compiler, curl (Linux: apt; macOS: Xcode CLT + Homebrew)
-#   2. Node.js 22 (Linux: official tarball into ~/.local, checksum verified; macOS: Homebrew)
+#   2. Node.js 22, updating an older one: nvm (nvm install + default), Homebrew (upgrade node,
+#      or switch node@20 to node@22), otherwise the official tarball (Linux, checksum verified)
+#      or Homebrew node@22 (macOS), put first on your PATH
 #   3. GPU toolkit: CUDA when an NVIDIA GPU is present (Linux); Metal needs nothing (macOS)
 #   4. the tools the language-pack checks use: pytest, ruff, mypy, shellcheck, cppcheck,
 #      clang-tidy, bats
@@ -63,8 +65,6 @@ apt_install() {  # apt_install <why> <pkg>...
     ok "$why: installed ${need[*]}"
 }
 
-node_major() { have node && node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
-
 install_node_linux() {
     local a
     case "$arch" in x86_64) a=x64 ;; aarch64|arm64) a=arm64 ;; *) die "no Node.js build for $arch" ;; esac
@@ -112,6 +112,92 @@ pipx_tool() {  # pipx_tool <command> <package>
     fi
 }
 
+# ---------------------------------------------------------------------------- Node.js
+shell_rc() {
+    if [[ "$(basename "${SHELL:-bash}")" == zsh ]]; then echo "$HOME/.zshrc"; else echo "$HOME/.bashrc"; fi
+}
+
+# Put a directory first on PATH in the shell's rc file. The rc file runs after nvm and
+# Homebrew set up their PATH earlier in it, so a line appended at the end wins.
+prefer_on_path() {  # prefer_on_path <dir> <what>
+    local dir="$1" what="$2" rc
+    rc="$(shell_rc)"
+    export PATH="$dir:$PATH"
+    if grep -qs "OpenHelper: $what" "$rc"; then
+        # Replace an earlier line so the newest directory is the one used.
+        sed -i.bak "/# OpenHelper: $what/{n;d;}" "$rc" && rm -f "$rc.bak"
+        sed -i.bak "/# OpenHelper: $what/d" "$rc" && rm -f "$rc.bak"
+    fi
+    if yesno "Make $what the default in new terminals (adds a PATH line to $rc)?" y; then
+        # shellcheck disable=SC2016  # $PATH is written literally, expanded when the shell starts
+        printf '\n# OpenHelper: %s\nexport PATH="%s:$PATH"\n' "$what" "$dir" >> "$rc"
+        ok "$rc now puts $dir first (open a new terminal, or: source $rc)"
+    else
+        warn "your default node stays the older one; OpenHelper's make targets still find $dir"
+    fi
+}
+
+node_on_path_major() { have node && node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+
+ensure_node() {
+    local cur where real found
+    cur="$(node_on_path_major)"
+    if [[ "$cur" -ge "$NODE_MAJOR" ]]; then
+        ok "Node.js $(node -v): already installed ($(command -v node))"
+        return
+    fi
+    if [[ "$cur" -gt 0 ]]; then
+        where="$(command -v node)"
+        real="$(node -p 'require("fs").realpathSync(process.execPath)' 2>/dev/null || echo "$where")"
+        warn "found Node.js $(node -v) at $where, which is older than $NODE_MAJOR; updating"
+    else
+        real=""
+    fi
+
+    # 1. nvm: install the new major with nvm and make it the default.
+    if [[ "$real" == "$HOME/.nvm/"* || ( -z "$real" && -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ) ]]; then
+        if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+            # shellcheck disable=SC1091
+            . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+            nvm install "$NODE_MAJOR" >/dev/null
+            if yesno "Make Node.js $NODE_MAJOR nvm's default (nvm alias default $NODE_MAJOR)?" y; then
+                nvm alias default "$NODE_MAJOR" >/dev/null
+                ok "nvm default is now Node.js $(nvm version "$NODE_MAJOR")"
+            fi
+            ok "installed Node.js $(nvm version "$NODE_MAJOR") with nvm"
+            return
+        fi
+    fi
+
+    if [[ "$os" == Darwin ]]; then
+        # 2. Homebrew's unversioned `node` formula: upgrading it gives the current release.
+        if [[ "$real" == */Cellar/node/* ]]; then
+            echo "  upgrading Homebrew's node"
+            brew upgrade node
+            ok "Node.js $(node -v)"
+            [[ "$(node_on_path_major)" -ge "$NODE_MAJOR" ]] && return
+        fi
+        # 3. An older versioned formula (node@20) or a node from nodejs.org: install node@22.
+        brew_install "Node.js $NODE_MAJOR" "node@$NODE_MAJOR"
+        if [[ "$real" =~ /Cellar/node@([0-9]+)/ ]] && [[ "${BASH_REMATCH[1]}" -lt "$NODE_MAJOR" ]]; then
+            if yesno "Switch Homebrew's linked node from node@${BASH_REMATCH[1]} to node@$NODE_MAJOR?" y; then
+                brew unlink "node@${BASH_REMATCH[1]}" >/dev/null
+                brew link --overwrite --force "node@$NODE_MAJOR" >/dev/null
+                hash -r
+                ok "Homebrew now links node@$NODE_MAJOR ($(node -v))"
+                return
+            fi
+        fi
+        prefer_on_path "$(brew --prefix "node@$NODE_MAJOR")/bin" "Node.js $NODE_MAJOR"
+    else
+        install_node_linux
+        prefer_on_path "$HOME/.local/bin" "Node.js $NODE_MAJOR"
+    fi
+
+    found="$("$here/scripts/find-node.sh" "$NODE_MAJOR")" || die "Node.js $NODE_MAJOR is still not available; see the messages above"
+    ok "OpenHelper will use $("$found/node" -v) from $found"
+}
+
 # ---------------------------------------------------------------------------- Linux
 linux() {
     have apt-get || die "this installer supports Ubuntu/Debian (apt). On other distributions install: git cmake gcc g++ make curl python3 pipx nodejs>=$NODE_MAJOR shellcheck cppcheck clang-tidy bats"
@@ -126,12 +212,7 @@ linux() {
     apt_install "build tools" git cmake build-essential pkg-config curl ca-certificates xz-utils unzip
 
     b "2/5 Node.js $NODE_MAJOR"
-    if [[ "$(node_major)" -ge "$NODE_MAJOR" ]]; then
-        ok "Node.js $(node -v): already installed"
-    else
-        [[ "$(node_major)" -gt 0 ]] && warn "found Node.js $(node -v), which is older than $NODE_MAJOR"
-        install_node_linux
-    fi
+    ensure_node
     ensure_local_bin_on_path
 
     b "3/5 GPU toolkit"
@@ -217,32 +298,23 @@ macos() {
     brew_install "build tools" git cmake
 
     b "2/5 Node.js $NODE_MAJOR"
-    if [[ "$(node_major)" -ge "$NODE_MAJOR" ]]; then
-        ok "Node.js $(node -v): already installed"
-    else
-        brew_install "Node.js" "node@$NODE_MAJOR"
-        local nb
-        nb="$(brew --prefix "node@$NODE_MAJOR")/bin"
-        export PATH="$nb:$PATH"
-        local rc="$HOME/.zprofile"
-        if ! grep -qs "node@$NODE_MAJOR" "$rc" && yesno "Add Node.js $NODE_MAJOR to your PATH in $rc?" y; then
-            # shellcheck disable=SC2016  # $PATH is written literally, expanded when the shell starts
-            printf '\n# Added by OpenHelper (make prereqs)\nexport PATH="%s:$PATH"\n' "$nb" >> "$rc"
-            ok "added $nb to PATH in $rc (open a new terminal)"
-        fi
-    fi
+    ensure_node
 
     b "3/5 GPU toolkit"
     ok "Metal is part of macOS; nothing to install"
 
     b "4/5 Tools the checks use"
     brew_install "check tools" python pipx shellcheck cppcheck llvm bats-core
-    if ! have clang-tidy && [[ -x "$(brew --prefix llvm)/bin/clang-tidy" ]]; then
+    ensure_local_bin_on_path
+    # Homebrew keeps llvm off the PATH (its caveat above); only clang-tidy is needed, so link just that
+    # rather than putting all of llvm first, which would replace Apple's clang.
+    if have clang-tidy; then
+        ok "clang-tidy: $(command -v clang-tidy)"
+    elif [[ -x "$(brew --prefix llvm)/bin/clang-tidy" ]]; then
         mkdir -p "$HOME/.local/bin"
         ln -sf "$(brew --prefix llvm)/bin/clang-tidy" "$HOME/.local/bin/clang-tidy"
-        ok "linked clang-tidy into ~/.local/bin (Homebrew keeps llvm off the PATH)"
+        ok "linked clang-tidy into ~/.local/bin (you can ignore Homebrew's llvm PATH advice)"
     fi
-    ensure_local_bin_on_path
     pipx_tool pytest pytest
     pipx_tool ruff ruff
     pipx_tool mypy mypy

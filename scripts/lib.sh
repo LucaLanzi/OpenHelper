@@ -38,6 +38,13 @@ arch_name() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Use a new enough Node.js even when an older one comes first on the PATH.
+if _oh_node_dir="$("$OH_ROOT/scripts/find-node.sh" 2>/dev/null)"; then
+    PATH="$_oh_node_dir:$PATH"
+    export PATH
+fi
+unset _oh_node_dir
+
 # Read KEY from versions.lock.
 lock_get() {
     grep -E "^$1=" "$OH_ROOT/versions.lock" | head -n1 | cut -d= -f2-
