@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
 import { makeSandbox } from "../src/sandbox/sandbox.js";
-import { REPO_ROOT, tempWorkspace, write } from "./helpers.js";
+import { git, REPO_ROOT, tempWorkspace, write } from "./helpers.js";
 
 const desktop: HardwareInfo = {
   os: "linux",
@@ -309,5 +310,17 @@ describe("host sandbox", () => {
     } finally {
       process.env.OPENHELPER_ROOT = REPO_ROOT;
     }
+  });
+});
+
+describe("setup scripts", () => {
+  it("finds the newest release tag in a repo with thousands of tags", () => {
+    const repo = tempWorkspace();
+    git(repo, "init", "-q");
+    git(repo, "commit", "-q", "--allow-empty", "-m", "first");
+    const sha = git(repo, "rev-parse", "HEAD");
+    write(repo, ".git/packed-refs", Array.from({ length: 20_000 }, (_, i) => `${sha} refs/tags/b${i}\n`).join(""));
+    const out = execFileSync("bash", ["-c", '. "$1/scripts/lib.sh"; newest_release_tag "$2"', "_", REPO_ROOT, repo], { encoding: "utf8" });
+    expect(out.trim()).toBe("b19999");
   });
 });

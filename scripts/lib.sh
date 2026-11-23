@@ -50,6 +50,11 @@ lock_get() {
     grep -E "^$1=" "$OH_ROOT/versions.lock" | head -n1 | cut -d= -f2-
 }
 
+# Newest llama.cpp release tag in a clone. Piping `git tag` into head dies of SIGPIPE under pipefail.
+newest_release_tag() {
+    git -C "$1" for-each-ref --count=1 --sort=-v:refname --format='%(refname:short)' 'refs/tags/b[0-9]*'
+}
+
 # Record what setup actually built, so the next machine can reproduce it.
 record() {
     mkdir -p "$OH_WS"

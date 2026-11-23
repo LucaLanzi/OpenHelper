@@ -50,7 +50,7 @@ if [ ! -d "$LLAMA_DIR/.git" ]; then
 fi
 git -C "$LLAMA_DIR" fetch --tags --quiet
 if [ "$ref" = "pending" ]; then
-    ref="$(git -C "$LLAMA_DIR" tag --list 'b[0-9]*' --sort=-v:refname | head -n1)"
+    ref="$(newest_release_tag "$LLAMA_DIR")"
     warn "versions.lock has no llama.cpp pin yet; using newest tag $ref (run \`make pin\` after verifying)"
 fi
 git -C "$LLAMA_DIR" checkout --quiet "$ref"
