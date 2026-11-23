@@ -192,8 +192,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   let reply = await ask(ctx, "implement", prompt, { temperature });
   const touched = new Set<string>();
   const missed = new Set<string>();
-  const onlyFile = files.length === 1 ? files[0]!.path : undefined;
-  let editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
+  let editErrors = applyAll(ctx, dir, reply, touched, missed, files);
   let attempts = 1;
   let check = await runChecks(dir, ctx.languages, ctx.sandbox, {
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -212,7 +211,9 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
       ...editErrors.map((e) => `edit error: ${e}`),
       ...failed.map((r) => `### ${r.language}/${r.id} (${r.status})\n${tail(r.output, 3000)}`),
     ].join("\n\n");
-    const current = [...new Set([...touched, ...missed])]
+    // The repair call starts a fresh conversation, so give it the task and the plan's files too:
+    // an edit with no usable path leaves touched and missed empty.
+    const current = [...new Set([...touched, ...missed, ...files.map((f) => f.path)])]
       .slice(0, 8)
       .map((p) => {
         try {
@@ -222,8 +223,8 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
         }
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
-    reply = await ask(ctx, "repair", render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
-    editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
+    reply = await ask(ctx, "repair", render(loadTemplate("repair"), { plan: planText, checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
+    editErrors = applyAll(ctx, dir, reply, touched, missed, files);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
@@ -248,10 +249,25 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   return { n, confidence, checks: check.results, edit_errors: editErrors, attempts, diff, files: changed, hallucination: hall.matches };
 }
 
-function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>, onlyFile?: string): string[] {
-  // Small models often leave out the path when the plan names a single file.
-  const blocks = parseEditBlocks(reply).map((b) => (b.path || !onlyFile ? b : { ...b, path: onlyFile }));
+function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>, planFiles: { path: string; content: string }[] = []): string[] {
+  const blocks = parseEditBlocks(reply);
   if (!blocks.length) return ["the reply contained no search/replace blocks"];
+  // Small models often leave out the path. Pick the plan file that holds the SEARCH text, else
+  // the block before it in the same reply, else the plan's only file.
+  let prev = "";
+  for (const b of blocks) {
+    if (!b.path) {
+      const holders = b.search.trim() ? planFiles.filter((f) => f.content.includes(b.search)) : [];
+      const [guess, why] =
+        holders.length === 1 ? [holders[0]!.path, "the plan file that contains the SEARCH text"]
+        : prev ? [prev, "same as the block before"]
+        : planFiles.length === 1 ? [planFiles[0]!.path, "the only file in the plan"]
+        : ["", ""];
+      if (guess) ctx.log(`edit with no file path: using ${guess} (${why})`);
+      b.path = guess;
+    }
+    prev = b.path;
+  }
   const out = applyEditBlocks(dir, blocks);
   for (const o of out) {
     ctx.log(`edit ${o.path}: ${o.ok ? "applied" : `failed (${o.error})`}`);
@@ -270,6 +286,11 @@ export interface ReviewOutput {
 }
 
 export async function review(ctx: AgentContext, planText: string, patch: string, checks: string): Promise<ReviewOutput> {
+  // Nothing to review: do not ask the model, which may approve an empty change.
+  if (!patch.trim()) {
+    ctx.log("review: the coder made no change; not asking the model");
+    return { review: "## Verdict\nchanges needed\n\nThe coder made no change, so there is nothing to approve.", verdict: "changes needed" };
+  }
   const prompt = render(loadTemplate("review"), {
     project: ctx.project.name,
     plan: planText,

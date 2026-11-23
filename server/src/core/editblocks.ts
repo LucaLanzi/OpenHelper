@@ -37,9 +37,10 @@ export function parseEditBlocks(text: string): EditBlock[] {
   for (let i = 0; i < lines.length; i++) {
     if (!START.test(lines[i]!)) continue;
     // The path is the nearest non-empty line above, without fences or markdown decoration.
+    // Reaching the previous block's end marker means this block has no path of its own.
     let p = i - 1;
     while (p >= 0 && (lines[p]!.trim() === "" || lines[p]!.trim().startsWith("```"))) p--;
-    const path = p >= 0 ? cleanPath(lines[p]!) : "";
+    const path = p >= 0 && !END.test(lines[p]!) ? cleanPath(lines[p]!) : "";
     const search: string[] = [];
     const replace: string[] = [];
     let j = i + 1;

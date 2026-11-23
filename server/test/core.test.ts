@@ -18,7 +18,7 @@ import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
 import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack, infoToText } from "../src/index/docs.js";
-import { implement } from "../src/agent/agents.js";
+import { implement, review } from "../src/agent/agents.js";
 import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
 import { JobQueue } from "../src/jobs/queue.js";
@@ -452,6 +452,44 @@ describe("host sandbox", () => {
     const out = await implement(implementCtx(repo, sandbox, () => reply), "Edit add\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
     expect(out.best?.edit_errors).toEqual([]);
     expect(out.best?.files).toEqual(["calc/ops.py"]);
+  });
+  it("places path-less edits in a two-file plan by their SEARCH text, and repairs with the task in view", async () => {
+    tempWorkspace();
+    const repo = samplePythonRepo();
+    let calls = 0;
+    const sandbox: Sandbox = {
+      driver: "none",
+      // The first checks fail so one repair runs.
+      run: async (cmd) => ({ code: cmd.startsWith("command -v") || calls > 1 ? 0 : 1, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
+    };
+    // What the 8B wrote in the Mac's workflow run: two blocks, neither with a path line.
+    const reply = [
+      "<<<<<<< SEARCH\ndef add(a, b):\n    return a + b\n=======\ndef add(a, b):\n    return a + b\n\n\ndef sub(a, b):\n    return a - b\n>>>>>>> REPLACE",
+      "<<<<<<< SEARCH\nfrom calc.ops import add, mul\n=======\nfrom calc.ops import add, mul, sub\n>>>>>>> REPLACE",
+      "",
+    ].join("\n");
+    expect(parseEditBlocks(reply).map((b) => b.path)).toEqual(["", ""]);
+    const prompts: string[] = [];
+    const ctx = implementCtx(repo, sandbox, (m) => {
+      prompts.push(m);
+      calls++;
+      return calls === 1 ? reply : "No change needed.";
+    });
+    const out = await implement(ctx, "Add a sub function and import it in the tests\n\n## Files to change\n- `calc/ops.py`\n- `tests/test_ops.py`", { discardBranches: true });
+    // Both edits landed; the repair's reply ("No change needed.") is not part of this test.
+    expect(out.best?.diff).toContain("+def sub(a, b):");
+    expect(out.best?.diff).toContain("+from calc.ops import add, mul, sub");
+    expect(prompts[1]).toContain("Add a sub function and import it in the tests");
+    expect(prompts[1]).toContain("tests/test_ops.py\n```\n");
+  });
+});
+
+describe("review", () => {
+  it("never approves an empty change, and does not ask the model about one", async () => {
+    let asked = false;
+    const ctx = { ...implementCtx("/nonexistent", { driver: "none", run: async () => ({ code: 0, output: "", timed_out: false, duration_ms: 0 }) }, () => ((asked = true), "## Verdict\napprove")) };
+    expect(await review(ctx, "Add abs_diff", "", "")).toMatchObject({ verdict: "changes needed" });
+    expect(asked).toBe(false);
   });
 });
 
