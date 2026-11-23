@@ -25,6 +25,11 @@ export interface ChatResult {
   duration_ms: number;
 }
 
+interface StreamEvent {
+  choices?: { delta?: { content?: string } }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
 export class LlmError extends Error {}
 
 export class LlmClient {
@@ -37,13 +42,38 @@ export class LlmClient {
     return `${this.baseUrl.replace(/\/+$/, "")}${path}`;
   }
 
+  /** Streams internally: Node's fetch gives up after 5 minutes without response headers. */
   async chat(o: ChatOptions): Promise<ChatResult> {
     const t0 = Date.now();
+    let content = "";
+    let usage: StreamEvent["usage"];
+    for await (const j of this.events(o)) {
+      content += j.choices?.[0]?.delta?.content ?? "";
+      usage = j.usage ?? usage;
+    }
+    return {
+      content: stripThinking(content),
+      prompt_tokens: usage?.prompt_tokens ?? 0,
+      completion_tokens: usage?.completion_tokens ?? 0,
+      duration_ms: Date.now() - t0,
+    };
+  }
+
+  /** Streams content deltas; yields strings. */
+  async *chatStream(o: ChatOptions): AsyncGenerator<string> {
+    for await (const j of this.events(o)) {
+      const d = j.choices?.[0]?.delta?.content;
+      if (d) yield d;
+    }
+  }
+
+  private async *events(o: ChatOptions): AsyncGenerator<StreamEvent> {
     const body: Record<string, unknown> = {
       model: o.model,
       messages: o.messages,
       temperature: o.temperature ?? 0.2,
-      stream: false,
+      stream: true,
+      stream_options: { include_usage: true },
     };
     if (o.max_tokens) body.max_tokens = o.max_tokens;
     if (o.reasoning === false) body.chat_template_kwargs = { enable_thinking: false };
@@ -55,32 +85,7 @@ export class LlmClient {
     }).catch((e: Error) => {
       throw new LlmError(`model server unreachable at ${this.baseUrl}: ${e.message}`);
     });
-    if (!res.ok) throw new LlmError(`model server returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
-    const j = (await res.json()) as {
-      choices?: { message?: { content?: string; reasoning_content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const content = j.choices?.[0]?.message?.content ?? "";
-    return {
-      content: stripThinking(content),
-      prompt_tokens: j.usage?.prompt_tokens ?? 0,
-      completion_tokens: j.usage?.completion_tokens ?? 0,
-      duration_ms: Date.now() - t0,
-    };
-  }
-
-  /** Streams content deltas; yields strings. */
-  async *chatStream(o: ChatOptions): AsyncGenerator<string> {
-    const body: Record<string, unknown> = { model: o.model, messages: o.messages, temperature: o.temperature ?? 0.2, stream: true };
-    if (o.max_tokens) body.max_tokens = o.max_tokens;
-    if (o.reasoning === false) body.chat_template_kwargs = { enable_thinking: false };
-    const res = await fetch(this.url("/v1/chat/completions"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: o.signal ?? AbortSignal.timeout(this.timeoutMs),
-    });
-    if (!res.ok || !res.body) throw new LlmError(`model server returned ${res.status}`);
+    if (!res.ok || !res.body) throw new LlmError(`model server returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
     const decoder = new TextDecoder();
     let buf = "";
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
@@ -92,13 +97,14 @@ export class LlmClient {
         if (!line.startsWith("data:")) continue;
         const data = line.slice(5).trim();
         if (data === "[DONE]") return;
+        let j: StreamEvent;
         try {
-          const j = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] };
-          const d = j.choices?.[0]?.delta?.content;
-          if (d) yield d;
+          j = JSON.parse(data) as StreamEvent;
         } catch {
           // ignore keep-alives and partial lines
+          continue;
         }
+        yield j;
       }
     }
   }

@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { LlmClient } from "../src/llm/client.js";
 import { audit, readAudit, verifyAudit } from "../src/core/audit.js";
 import { assess, countValidCitations, type CheckResult } from "../src/core/confidence.js";
 import { applyEditBlocks, parseEditBlocks } from "../src/core/editblocks.js";
@@ -332,5 +335,27 @@ describe("doc packs", () => {
     const file = write(dir, "big.md", "x".repeat(600 * 1024));
     expect(addLocalDocs("big", file)).toBe(1);
     expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
+  });
+});
+
+describe("model client", () => {
+  it("reads chat answers and usage from a stream, so long generations do not time out", async () => {
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.write('data: {"choices":[{"delta":{"content":"<think>x</think>hel"}}]}\n\n');
+        res.write('data: {"choices":[{"delta":{"content":"lo"}}]}\n\n');
+        res.end('data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\ndata: [DONE]\n\n');
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const r = await new LlmClient(url).chat({ model: "m", messages: [{ role: "user", content: "hi" }] });
+      expect(r).toMatchObject({ content: "hello", prompt_tokens: 3, completion_tokens: 2 });
+    } finally {
+      server.close();
+    }
   });
 });
