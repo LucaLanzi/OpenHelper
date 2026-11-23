@@ -21,6 +21,7 @@ import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack } from "../
 import { implement } from "../src/agent/agents.js";
 import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
+import { JobQueue } from "../src/jobs/queue.js";
 import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
 import { git, REPO_ROOT, samplePythonRepo, tempWorkspace, write } from "./helpers.js";
 
@@ -299,6 +300,31 @@ describe("doc packs", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("job queue", () => {
+  it("writes a running job's log to its file before the job ends", async () => {
+    const dir = tempWorkspace();
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const q = new JobQueue(
+      async (_job, log) => {
+        log("task 1/5: started");
+        await held;
+        return {};
+      },
+      { logSaveMs: 0 },
+    );
+    const job = q.create({ type: "eval", project: "p", platform: "mac", model: "m", input: {} });
+    q.start(job.id, "test");
+    const file = join(dir, "jobs", `${job.id}.json`);
+    for (let i = 0; i < 50 && !readFileSync(file, "utf8").includes("task 1/5"); i++) await new Promise((r) => setTimeout(r, 20));
+    const onDisk = JSON.parse(readFileSync(file, "utf8")) as { status: string; log: string[] };
+    expect(onDisk.status).toBe("running");
+    expect(onDisk.log.at(-1)).toContain("task 1/5: started");
+    release();
+    await q.wait(job.id);
   });
 });
 

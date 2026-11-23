@@ -41,7 +41,11 @@ export class JobQueue extends EventEmitter {
   paused = false;
   pendingSwap?: { model: string; apply: () => Promise<void> };
 
-  constructor(private handler: JobHandler) {
+  /** logSaveMs: how often a running job's file is rewritten with its log so far. */
+  constructor(
+    private handler: JobHandler,
+    private opts: { logSaveMs: number } = { logSaveMs: 5000 },
+  ) {
     super();
     this.setMaxListeners(100);
     this.load();
@@ -196,11 +200,17 @@ export class JobQueue extends EventEmitter {
     next.status = "running";
     next.started_at = new Date().toISOString();
     this.save(next);
+    // Write the job file now and then, so a long job's log can be read (and survives a crash).
+    let savedAt = Date.now();
     const log = (s: string) => {
       const line = `${new Date().toISOString().slice(11, 19)} ${s}`;
       next.log.push(line);
       if (next.log.length > 2000) next.log.splice(0, next.log.length - 2000);
       this.emit("log", next.id, line);
+      if (Date.now() - savedAt >= this.opts.logSaveMs) {
+        savedAt = Date.now();
+        this.save(next);
+      }
     };
     try {
       const out = await this.handler(next, log, abort.signal);
