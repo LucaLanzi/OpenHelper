@@ -23,15 +23,20 @@ if printf '%s' "$out" | grep -q "warning: undefined variable"; then
 fi
 
 # A line indented with spaces right after a rule line is almost always a broken recipe.
+# Backslash-continued lines (long prerequisite or .PHONY lists) are skipped.
 awk -v f="$mf" '
+    cont { cont = /\\$/; next }
+    { cont = /\\$/ }
     /^[^#\t][^=]*:([^=]|$)/ { inrule = 1; next }
     /^$/ { inrule = 0; next }
     inrule && /^ +[^ ]/ { printf "%s:%d: recipe line starts with spaces, not a tab\n", f, NR; bad = 1 }
     END { exit bad }
 ' "$mf" || status=1
 
+# Join continued lines so a .PHONY list split over several lines is read whole.
+joined=$(awk '{ if (sub(/\\$/, "")) printf "%s ", $0; else print }' "$mf")
 for t in all clean test check install distclean; do
-    if grep -Eq "^${t}[[:space:]]*:" "$mf" && ! grep -Eq "^\.PHONY:.*(^|[[:space:]])$t([[:space:]]|$)" "$mf"; then
+    if grep -Eq "^${t}[[:space:]]*:" "$mf" && ! printf '%s\n' "$joined" | grep -Eq "^\.PHONY:.*(^|[[:space:]])$t([[:space:]]|$)"; then
         echo "$mf: target '$t' is not declared .PHONY"
         status=1
     fi

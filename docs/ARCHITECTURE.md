@@ -1,0 +1,54 @@
+# Architecture
+
+## Processes on one machine
+
+| Process | Listens on | Does |
+| --- | --- | --- |
+| `llama-swap` | 127.0.0.1:8741 | Starts `llama-server` for whichever model a request names; one chat model loaded at a time, the embedding model kept alongside |
+| `openhelper serve` | 127.0.0.1 or the Tailscale IP, port 8740 | API, dashboard, job queue, agents, checks, search, workflows, audit log |
+| Sandbox | none (network off) | Builds, tests and lints generated code |
+
+## Control plane and data plane
+
+- **Control plane**: the dashboard and the `control` role. It can see and configure every platform it has a token for. Starting a workflow is a control-plane action.
+- **Data plane**: work handed from one platform's agent to another's. Every hand-off after the first step goes through the link policy (`links.toml`): isolated by default, one-way or two-way, with hop, token and time budgets and a kill switch. The receiving platform checks its own `links.toml` too.
+
+## A workflow, step by step
+
+1. You start `implement-feature` with a task. The planner step runs on `@plan` (an alias set in `config.toml`).
+2. The planner retrieves passages from the project's index, writes a plan that cites them, and saves it under `workspace/plans/`.
+3. The run waits for you. You edit the plan if you like and approve it. The approved text replaces the model's plan for every later step.
+4. The coder step runs on `@build`. If that is another machine, the link policy decides whether the hand-off is allowed.
+5. The coder makes a worktree on a new branch, asks for search/replace edits, applies them, and runs the language-pack checks in the sandbox. If checks fail, it shows the model the failures and tries again, up to `repair_attempts`. With `best_of` above 1 it makes several candidates and keeps the best.
+6. The reviewer reads the plan, the patch and the check results, and gives a verdict. The run waits for you again.
+7. The branch stays in your repo. Nothing is merged for you.
+
+## Confidence status
+
+Computed from check results only:
+
+- **Checked** (green): every required check ran and passed, and at least one test ran. For answers: at least one valid citation.
+- **Partly checked** (amber): nothing failed, but a required check was skipped, no tests exist, or an answer has no citations.
+- **Failed checks** (red): a check failed or errored, or an edit could not be applied.
+
+The eval measures how often "Checked" was actually right (`green_precision`), per model.
+
+## Search
+
+Each project has an index of its repos and doc packs: chunks in `chunks.jsonl`, a BM25 keyword index, and, if an embedding model is configured, vectors. Search combines the two rankings with reciprocal rank fusion. Secrets are scrubbed and secret files skipped before indexing.
+
+## Evals
+
+`mine-evals` scans git history for commits that change both source and test files, within size limits. Each becomes a task: start at the parent commit, give the model only the commit message and the files it touched, let it implement, then add the commit's tests and run the build and tests. Evals leave no branches behind. Results go to `workspace/results/<project>/`.
+
+## Files
+
+```
+packs/          engine packs (models, languages, docs, workflows, templates) — public
+workspace/      one user's data — never committed
+  config.toml   this machine: self, roles, bind, aliases
+  platforms/    one file per machine
+  links.toml    which machine may hand work to which
+  projects/     one file per project
+  plans/ jobs/ runs/ results/ index/ evals/ docs/ audit/ secrets/ state/
+```

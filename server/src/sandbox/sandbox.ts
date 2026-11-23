@@ -76,8 +76,9 @@ class HostSandbox implements Sandbox {
   private unshare = canUnshareNet();
   run(cmd: string, cwd: string, o: RunOptions): Promise<RunResult> {
     const env = baseEnv({ OH_PACKS: packsDir() });
-    // Where unprivileged user namespaces exist, still drop the network.
-    if (this.unshare) return exec("unshare", ["-rn", "sh", "-c", cmd], cwd, env, o.timeoutMs);
+    // Where unprivileged user namespaces exist, still drop the network (loopback stays up,
+    // because many test suites start local servers).
+    if (this.unshare) return exec("unshare", ["-rn", "sh", "-c", 'ip link set lo up && exec sh -c "$0"', cmd], cwd, env, o.timeoutMs);
     return exec("sh", ["-c", cmd], cwd, env, o.timeoutMs);
   }
 }
@@ -118,7 +119,7 @@ class LimaSandbox implements Sandbox {
 function canUnshareNet(): boolean {
   if (process.platform !== "linux") return false;
   try {
-    return spawnSync("unshare", ["-rn", "true"], { stdio: "ignore", timeout: 3000 }).status === 0;
+    return spawnSync("unshare", ["-rn", "sh", "-c", "ip link set lo up"], { stdio: "ignore", timeout: 3000 }).status === 0;
   } catch {
     return false;
   }
