@@ -22,6 +22,7 @@ import { implement } from "../src/agent/agents.js";
 import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
 import { JobQueue } from "../src/jobs/queue.js";
+import { runChecks } from "../src/checks/runner.js";
 import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
 import { git, REPO_ROOT, samplePythonRepo, tempWorkspace, write } from "./helpers.js";
 
@@ -421,8 +422,8 @@ describe("host sandbox", () => {
   });
   it("runs Lima containers under the OpenHelper AppArmor profile with no network", async () => {
     const dir = tempWorkspace();
-    // A VM with system containerd: plain `nerdctl info` fails, so the engine uses sudo.
-    chmodSync(write(dir, "bin/limactl", '#!/bin/sh\n[ "$4" = nerdctl ] && [ "$5" = info ] && exit 1\nprintf "%s\\n" "$@"\n'), 0o755);
+    // A VM with system containerd: plain `nerdctl` does not have the image, so the engine uses sudo.
+    chmodSync(write(dir, "bin/limactl", '#!/bin/sh\n[ "$4" = nerdctl ] && [ "$5" = image ] && exit 1\nprintf "%s\\n" "$@"\n'), 0o755);
     const path = process.env.PATH;
     process.env.PATH = `${join(dir, "bin")}:${path}`;
     try {
@@ -430,9 +431,27 @@ describe("host sandbox", () => {
       const args = r.output.split("\n");
       expect(args[args.indexOf("--security-opt") + 1]).toBe("apparmor=openhelper-sandbox");
       expect(args[args.indexOf("--network") + 1]).toBe("none");
+      expect(args.slice(args.indexOf("--") + 1, args.indexOf("--") + 3)).toEqual(["sudo", "nerdctl"]);
     } finally {
       process.env.PATH = path;
     }
+  });
+  it("reports a sandbox that cannot run instead of skipping every check", async () => {
+    tempWorkspace();
+    const sandbox: Sandbox = { driver: "lima", run: async () => ({ code: 1, output: "no such image", timed_out: false, duration_ms: 0 }) };
+    await expect(runChecks(samplePythonRepo(), loadLanguages(), sandbox)).rejects.toThrow(/sandbox could not run/);
+  });
+  it("applies an edit with no path when the plan names one file", async () => {
+    tempWorkspace();
+    const repo = samplePythonRepo();
+    const sandbox: Sandbox = {
+      driver: "none",
+      run: async (cmd) => ({ code: 0, output: cmd.startsWith("command -v") ? "python3\n" : "", timed_out: false, duration_ms: 0 }),
+    };
+    const reply = "<<<<<<< SEARCH\ndef add(a, b):\n=======\ndef add(a, b):  # edited\n>>>>>>> REPLACE\n";
+    const out = await implement(implementCtx(repo, sandbox, () => reply), "Edit add\n\n## Files to change\n- `calc/ops.py`", { discardBranches: true });
+    expect(out.best?.edit_errors).toEqual([]);
+    expect(out.best?.files).toEqual(["calc/ops.py"]);
   });
 });
 

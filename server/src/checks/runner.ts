@@ -96,6 +96,8 @@ async function probeBinaries(sandbox: Sandbox, dir: string, bins: string[]): Pro
   if (!bins.length) return new Set();
   const script = bins.map((b) => `command -v ${shellQuote(b)} >/dev/null 2>&1 && echo ${shellQuote(b)}`).join("; ");
   const r = await sandbox.run(`${script}; true`, dir, { timeoutMs: 60_000 });
+  // The script ends in `true`, so a failure here means the sandbox itself did not run.
+  if (r.code !== 0) throw new Error(`sandbox could not run (exit ${r.code}): ${tail(r.output, 500)}`);
   return new Set(r.output.split("\n").map((s) => s.trim()).filter(Boolean));
 }
 

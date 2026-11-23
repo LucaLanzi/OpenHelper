@@ -121,7 +121,8 @@ class LimaSandbox implements Sandbox {
   ) {}
 
   private detect(): Promise<string[]> {
-    this.nerdctl ??= exec("limactl", ["shell", this.vm, "--", "nerdctl", "info"], process.cwd(), baseEnv({}), 60_000).then((r) =>
+    // Ask for the image, not `nerdctl info`: that also succeeds on a VM whose containers live under sudo.
+    this.nerdctl ??= exec("limactl", ["shell", this.vm, "--", "nerdctl", "image", "inspect", this.image], process.cwd(), baseEnv({}), 60_000).then((r) =>
       r.code === 0 ? ["nerdctl"] : ["sudo", "nerdctl"],
     );
     return this.nerdctl;

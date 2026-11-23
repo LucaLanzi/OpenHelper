@@ -192,7 +192,8 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   let reply = await ask(ctx, "implement", prompt, { temperature });
   const touched = new Set<string>();
   const missed = new Set<string>();
-  let editErrors = applyAll(ctx, dir, reply, touched, missed);
+  const onlyFile = files.length === 1 ? files[0]!.path : undefined;
+  let editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
   let attempts = 1;
   let check = await runChecks(dir, ctx.languages, ctx.sandbox, {
     ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
@@ -222,7 +223,7 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
       })
       .filter((x): x is { path: string; content: string } => Boolean(x));
     reply = await ask(ctx, "repair", render(loadTemplate("repair"), { checks: failText, files: formatFiles(current) }), { temperature: 0.1 });
-    editErrors = applyAll(ctx, dir, reply, touched, missed);
+    editErrors = applyAll(ctx, dir, reply, touched, missed, onlyFile);
     check = await runChecks(dir, ctx.languages, ctx.sandbox, {
       ...(ctx.project.languages.length ? { languages: ctx.project.languages } : {}),
       ...(kinds?.length ? { kinds } : {}),
@@ -247,8 +248,9 @@ async function oneCandidate(ctx: AgentContext, planText: string, repo: string, d
   return { n, confidence, checks: check.results, edit_errors: editErrors, attempts, diff, files: changed, hallucination: hall.matches };
 }
 
-function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>): string[] {
-  const blocks = parseEditBlocks(reply);
+function applyAll(ctx: AgentContext, dir: string, reply: string, touched: Set<string>, missed: Set<string>, onlyFile?: string): string[] {
+  // Small models often leave out the path when the plan names a single file.
+  const blocks = parseEditBlocks(reply).map((b) => (b.path || !onlyFile ? b : { ...b, path: onlyFile }));
   if (!blocks.length) return ["the reply contained no search/replace blocks"];
   const out = applyEditBlocks(dir, blocks);
   for (const o of out) {
