@@ -17,6 +17,8 @@ import { htmlToText, nodeApiJsonToMarkdown } from "./chunk.js";
 type Lock = Record<string, { url: string; sha256: string; fetched_at: string }>;
 
 const lockFile = () => join(ws.docs(), "lock.json");
+/** Some sites (gnu.org) refuse requests without a User-Agent they recognise; say who we are. */
+export const DOC_FETCH_USER_AGENT = "OpenHelper/0.1 (+https://github.com/LucaLanzi/OpenHelper; doc-pack fetch)";
 
 export function docTextDir(pack: string): string {
   return join(ws.docs(), pack, "text");
@@ -52,7 +54,7 @@ export async function fetchDocPack(pack: DocPack, log: (s: string) => void = () 
   const lock = readJson<Lock>(lockFile(), {});
   for (const [i, src] of pack.sources.entries()) {
     log(`downloading ${src.url}`);
-    const res = await fetch(src.url, { signal: AbortSignal.timeout(30 * 60_000) });
+    const res = await fetch(src.url, { headers: { "user-agent": DOC_FETCH_USER_AGENT }, signal: AbortSignal.timeout(30 * 60_000) });
     if (!res.ok) throw new Error(`${src.url}: HTTP ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
     const sha = createHash("sha256").update(buf).digest("hex");

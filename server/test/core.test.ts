@@ -17,7 +17,7 @@ import { apply, stage } from "../src/core/staging.js";
 import { candidates, makePlan, tierFor, usableMemoryGb } from "../src/core/tiers.js";
 import { globToRegExp, parseDuration, render } from "../src/core/util.js";
 import { validateWorkflow } from "../src/core/workflow-def.js";
-import { addLocalDocs, docStatus } from "../src/index/docs.js";
+import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack } from "../src/index/docs.js";
 import { implement } from "../src/agent/agents.js";
 import { retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { buildIndex } from "../src/index/build.js";
@@ -277,6 +277,28 @@ describe("audit log", () => {
     const f = join(dir, "audit", `${new Date().toISOString().slice(0, 10)}.jsonl`);
     writeFileSync(f, readFileSync(f, "utf8").replace('"two"', '"TWO"'));
     expect(verifyAudit()).toBe(1);
+  });
+});
+
+describe("doc packs", () => {
+  it("say who is fetching, since gnu.org refuses Node's default User-Agent", async () => {
+    tempWorkspace();
+    const { createServer } = await import("node:http");
+    let ua = "";
+    const server = createServer((req, res) => {
+      ua = req.headers["user-agent"] ?? "";
+      if (!ua.startsWith("OpenHelper/")) return void res.writeHead(403).end();
+      res.writeHead(200, { "content-type": "text/plain" }).end("Bash manual\n");
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const pack = { id: "ua-test", sources: [{ url: `http://127.0.0.1:${port}/bash.txt`, format: "text", subdir: "" }] } as unknown as DocPack;
+      expect(await fetchDocPack(pack)).toBe(1);
+      expect(ua).toBe(DOC_FETCH_USER_AGENT);
+    } finally {
+      server.close();
+    }
   });
 });
 
