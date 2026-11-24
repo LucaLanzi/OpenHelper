@@ -13,6 +13,7 @@ Models: Qwen3-8B Q4_K_M and Qwen3-Embedding-0.6B Q8_0, both Apache-2.0, from Qwe
 | `make check-all` | 66 of 66 tests, typecheck and shellcheck |
 | `make install`, Metal build | Done after the fixes below |
 | Services | `127.0.0.1` only; `/api/health` OK; audit chain intact (`first_broken: -1`) |
+| Log out and back in | Both services restarted with new process IDs, health OK, 3 runs still waiting for approval, sandbox runs, audit chain intact |
 | Lima sandbox | All 6 checks of this repo pass, under the `openhelper-sandbox` AppArmor profile |
 | Sandbox confinement | Mount denied, `/proc/sysrq-trigger` read-only, no network |
 | Index | calc-demo 6,727 chunks; openhelper-test 10,171 chunks; hybrid, 1024-dim |
@@ -64,7 +65,7 @@ openhelper-test by task:
 
 ## Failed or not done
 
-- **Log out and back in:** not tested yet. It needs the owner.
+- **Reboot:** not tested. The services are launchd agents. The Lima VM survived the logout, but nothing is set up to start it after a reboot, so it may need `limactl start openhelper`.
 - **`make sandbox-vm`:** not run on this Mac. The VM here was set up by hand with system containerd. The script's `nerdctl info` check has the same flaw fixed in the engine by a274fd7: on this VM it would choose plain `nerdctl`, so it was not run against it.
 - **Phone layout:** the Jobs page overflows horizontally at 390 px. The other three phone pages fit.
 - **Not run:** Ubuntu desktop, 27B and 35B models, two real machines, copying between two real machines, fine-tuning (no training command exists).
