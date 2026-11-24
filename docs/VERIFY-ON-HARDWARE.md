@@ -46,7 +46,7 @@ M1 Pro, 32 GB, macOS, llama.cpp with Metal, Qwen3-8B Q4_K_M and Qwen3-Embedding-
 - [x] Model swap from the dashboard; kill switch on and off; `/api/audit/verify` reports no break
 - [x] MCP server (`node server/dist/cli.js mcp`): `list_projects`, `search` and `run_checks` answer
 - [x] Doc packs: gnu.org timed out from this network; the gnu-bash and gnu-make packs came from the mirror tarballs instead
-- [ ] Services come back after logging out and in
+- [x] Services come back after logging out and in (engine and llama-swap restarted with new PIDs, health OK, runs waiting for approval kept waiting; a reboot is not tested)
 - [x] `url` in `workspace/platforms/mac.toml` is a real address
 
 Next on the Mac: the 27B dense and 35B-A3B MoE models, after the owner approves the downloads.
