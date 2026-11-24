@@ -17,7 +17,7 @@ tokenizer = "qwen3.6"
 server_args = ["--jinja", "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]
 verified = false
 sha256 = ""
-notes = "Pin source and sha256 with `openhelper models pin` after the Phase 0 bake-off."
+notes = "Pin source and sha256 with `make download-model` after the Phase 0 bake-off."
 
 [source]
 hf_repo = ""

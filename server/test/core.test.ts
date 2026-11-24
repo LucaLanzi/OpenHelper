@@ -504,6 +504,13 @@ describe("doc packs", () => {
     expect(addLocalDocs("big", file)).toBe(1);
     expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
   });
+  it("names the right make command for a pack that has not been added", async () => {
+    tempWorkspace();
+    const lines: string[] = [];
+    await buildIndex(ProjectSchema.parse({ name: "calc", repos: [samplePythonRepo()], docs: ["cppreference", "python-stdlib"] }), { log: (s) => lines.push(s) });
+    expect(lines.join("\n")).toContain("make docs-add ID=cppreference FILE=path");
+    expect(lines.join("\n")).toContain("make docs-fetch ID=python-stdlib");
+  });
 });
 
 describe("implement", () => {

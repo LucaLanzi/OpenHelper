@@ -179,7 +179,7 @@ export const Platform = z.object({
   agents: z.array(AgentKind).default(["planner", "coder", "reviewer", "explainer"]),
   /** Run generated code automatically. Refused unless a sandbox driver other than none is set. */
   auto_run: z.boolean().default(false),
-  /** Measured values written by `openhelper detect` and benchmarks. */
+  /** Measured values written by `make detect` and benchmarks. */
   measured: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });
 export type Platform = z.infer<typeof Platform>;
