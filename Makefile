@@ -12,7 +12,7 @@ PROFILE ?= auto
 
 .PHONY: help install prereqs setup init detect plan build typecheck test lint-scripts check-all dev serve mock-llm \
         llama-swap-config sandbox-vm sandbox-image install-service token download-model tune bench mac-gpu-limit \
-        add-project docs-list docs-fetch index mine-evals eval models pin audit clean
+        add-project docs-list docs-fetch docs-add index mine-evals eval models pin audit clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-18s\033[0m %s\n", $$1, $$2}'
@@ -82,6 +82,9 @@ docs-list: build ## List doc packs and whether they are fetched
 
 docs-fetch: build ## Fetch a doc pack (ID=pack-id)
 	$(OH) docs fetch $(or $(ID),$(error set ID=pack-id))
+
+docs-add: build ## Add docs you downloaded yourself (ID=pack-id FILE=archive-or-folder)
+	$(OH) docs add-local $(or $(ID),$(error set ID=pack-id)) "$(patsubst ~/%,$(HOME)/%,$(or $(FILE),$(error set FILE=path)))"
 
 index: build ## Build a project's search index (PROJECT=name)
 	$(OH) index $(or $(PROJECT),$(error set PROJECT=name))

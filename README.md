@@ -81,6 +81,13 @@ make docs-fetch ID=python-stdlib        # repeat for each suggested pack
 make index PROJECT=my-repo
 ```
 
+`cppreference` can't be fetched automatically. Download the HTML book from its [archives page](https://en.cppreference.com/w/Cppreference:Archives), then add it and rebuild the index:
+
+```bash
+make docs-add ID=cppreference FILE=~/Downloads/html-book.zip    # a .zip, .tar.* or folder
+make index PROJECT=my-repo
+```
+
 Re-run `make index` after large changes to the repo. Your checkout is never edited: work happens in separate worktrees.
 
 ## 6. Ask a question
