@@ -290,6 +290,37 @@ describe("setup from the dashboard", () => {
     expect((await post("/api/models/add", { url: "http://insecure" }, "100.64.0.9")).statusCode).toBe(400);
   });
 
+  it("stops the VM once, after no dashboard and no job for unload_after_min, and refuses to turn off from elsewhere or mid-job", async () => {
+    const rt = a.rt;
+    const saved = rt.platform.sandbox.driver;
+    rt.platform.sandbox.driver = "lima";
+    const min = rt.platform.resources.unload_after_min * 60_000;
+    try {
+      const t0 = Date.now();
+      rt.dashboards = 1;
+      expect(rt.idleVmStop(t0)).toBe(false);
+      expect(rt.idleVmStop(t0 + 2 * min)).toBe(false); // a dashboard is open
+      rt.dashboards = 0;
+      expect(rt.idleVmStop(t0 + 2 * min + 1)).toBe(false); // idle starts now
+      expect(rt.idleVmStop(t0 + 3 * min)).toBe(true);
+      expect(rt.idleVmStop(t0 + 4 * min)).toBe(false); // only once per idle spell
+      rt.dashboards = 1;
+      rt.idleVmStop(t0 + 4 * min);
+      rt.dashboards = 0;
+      rt.idleVmStop(t0 + 4 * min);
+      expect(rt.idleVmStop(t0 + 5 * min)).toBe(true); // a new spell after the dashboard closed again
+    } finally {
+      rt.platform.sandbox.driver = saved;
+    }
+    expect((await post("/api/system/off", {}, "100.64.0.9")).statusCode).toBe(403);
+    rt.queue.pause(true);
+    const j = rt.queue.create({ type: "check", project: "calc", platform: rt.platform.name, model: "", input: {} });
+    rt.queue.start(j.id);
+    expect((await post("/api/system/off", {})).statusCode).toBe(409);
+    rt.queue.cancel(j.id);
+    rt.queue.pause(false);
+  });
+
   it("reports the sandbox state", async () => {
     expect(await api("GET", "/api/sandbox")).toMatchObject({ driver: "none", state: "none" });
     expect((await post("/api/sandbox", { on: true })).statusCode).toBe(409);

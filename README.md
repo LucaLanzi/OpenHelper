@@ -54,6 +54,17 @@ Some docs, like `cppreference`, must be downloaded by hand from [their site](htt
 
 The sandbox VM starts by itself when a job needs it. To free its memory, press **Stop** on the **Platforms** page.
 
+## Save battery
+
+OpenHelper turns its heavy parts off by itself when you aren't using it:
+
+- **Models** unload after `unload_after_min` minutes with no requests (20 on a Mac, 30 on a desktop; set it under `[resources]` in the platform file).
+- **The sandbox VM** stops once no dashboard has been open and no job has run for the same number of minutes. The next job starts it again, so that job takes a little longer to begin.
+
+What keeps running is the engine and the model server's small proxy, which use almost nothing while idle.
+
+To turn everything off now, press **Turn off OpenHelper** on the **System** page, or run `./openhelper stop`. Turn it back on with `./openhelper start`, which also opens the dashboard. It also starts again the next time you log in.
+
 ## Add a language
 
 On the **Library** page, enter its name, file extensions and test command under **Add a language**. Then press **Detect languages** on the project.
@@ -141,6 +152,8 @@ From a terminal: `./openhelper embeddings export PROJECT` (add `--out FILE` to w
 ## Connect another machine
 
 On the **Platforms** page, open **Connect another OpenHelper instance with Tailscale**. Enter the other machine's Tailscale name or IP (`tailscale ip -4` prints it), press **Check this address**, then save it with the name of the secret that holds its token. Any OS or hardware works. Agent hooks only allow the operations ticked for that machine, and only where a link allows it.
+
+To open a dashboard from another device instead, see [From another device (Tailscale)](docs/SETUP.md#from-another-device-tailscale).
 
 ## Update
 

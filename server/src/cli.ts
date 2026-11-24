@@ -20,7 +20,7 @@ import { exportEmbeddings, exportFile, importEmbeddings } from "./index/embed-ca
 import { LlmClient } from "./llm/client.js";
 import { mineProject, saveTasks, loadTasks } from "./miner/mine.js";
 import { addProject } from "./projects.js";
-import { makeSandbox } from "./sandbox/sandbox.js";
+import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
 import { newLoginCode } from "./setup.js";
 import { serveStdio } from "./mcp.js";
 import { llamaSwapConfig, modelFile } from "./swapconfig.js";
@@ -59,6 +59,8 @@ Setup
   models path ID                  print where the model file is expected
   token                           print this machine's API token (for the dashboard login)
   open                            open the dashboard, signed in with a one-time link
+  start                           turn OpenHelper on (after stop) and open the dashboard
+  stop                            turn OpenHelper off: stops the sandbox VM, model server and engine
 
 Projects
   add-project PATH [--name N]     register a repo as a project (detects languages, suggests doc packs)
@@ -133,7 +135,7 @@ async function main() {
         up = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
         if (!up) await new Promise((r) => setTimeout(r, 500));
       }
-      if (!up) throw new Error(`the engine is not answering on ${base}; check workspace/logs/`);
+      if (!up) throw new Error(`the engine is not answering on ${base}; if you turned it off, run \`./openhelper start\`, otherwise check workspace/logs/`);
       ensureApiToken();
       // In the fragment, so the code never reaches a server log.
       const url = `${base}/#/login/${newLoginCode()}`;
@@ -300,14 +302,28 @@ async function main() {
       return;
     }
 
+    case "stop": {
+      // The VM first: it is the biggest battery drain, and limactl needs no engine.
+      const p = loadPlatforms().find((x) => x.name === loadConfig().self);
+      if (p?.sandbox.driver === "lima" && (await limaState(p.sandbox.vm)) === "Running") {
+        out(`stopping the ${p.sandbox.vm} VM …`);
+        await limaPower(p.sandbox.vm, false);
+      }
+      const r = spawnSync(join(repoRoot(), "scripts", "power.sh"), ["off"], { stdio: "inherit" });
+      if (r.status !== 0) throw new Error("could not stop the services; see the message above");
+      out("Turn it back on with `./openhelper start`.");
+      return;
+    }
+
     case "serve": {
       const cfg = loadConfig();
       ensureApiToken();
       if ((cfg.bind === "0.0.0.0" || cfg.bind === "::") && !a["allow-all-interfaces"]) {
         throw new Error("refusing to listen on every interface; bind to 127.0.0.1 or your Tailscale IP in config.toml");
       }
-      const { app } = await buildApp({ logger: Boolean(a.verbose) });
+      const { app, rt } = await buildApp({ logger: Boolean(a.verbose) });
       await app.listen({ host: cfg.bind, port: cfg.port });
+      rt.watchIdle();
       out(`OpenHelper ${cfg.self} listening on http://${cfg.bind}:${cfg.port} (roles: ${cfg.roles.join(", ")})`);
       return;
     }

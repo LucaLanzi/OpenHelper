@@ -30,10 +30,10 @@ export function redeemLoginCode(code: string): boolean {
 }
 
 /** Runs a script that restarts this engine, so it has to outlive it. Output goes to workspace/logs/system.log. */
-export function runDetached(script: string): void {
+export function runDetached(script: string, args: string[] = []): void {
   ensureDir(join(ws.root(), "logs"));
   const fd = openSync(join(ws.root(), "logs", "system.log"), "w");
-  spawn(join(repoRoot(), "scripts", script), [], { cwd: repoRoot(), env: process.env, detached: true, stdio: ["ignore", fd, fd] }).unref();
+  spawn(join(repoRoot(), "scripts", script), args, { cwd: repoRoot(), env: process.env, detached: true, stdio: ["ignore", fd, fd] }).unref();
   closeSync(fd);
 }
 

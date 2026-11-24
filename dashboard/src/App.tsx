@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { get, getToken, post, setToken } from "./api";
+import { events, get, getToken, post, setToken } from "./api";
 import { ToastProvider } from "./components/ui";
 import { AppProvider, useApp } from "./context";
 import { Audit, Library, Links, Login, NotFound, Settings } from "./pages/Admin";
@@ -69,6 +69,8 @@ function Shell() {
   const { self } = useApp();
   const section = SECTION[route[0]!] ?? route[0]!;
   const phoneMore = !NAV.some((n) => n.phone && n.id === section);
+  // Held open while the dashboard is: the engine stops the sandbox VM once no dashboard is open.
+  useEffect(() => events(() => {}), []);
   useEffect(() => {
     if (window.location.hash) return;
     void get<{ done: boolean }>("/setup").then((s) => {

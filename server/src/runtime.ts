@@ -19,7 +19,7 @@ import { JobQueue, type Job } from "./jobs/queue.js";
 import { LlmClient } from "./llm/client.js";
 import { runEval } from "./miner/eval.js";
 import { loadTasks, mineProject, saveTasks } from "./miner/mine.js";
-import { limaState, makeSandbox } from "./sandbox/sandbox.js";
+import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
 import { runScript, STARTER_MODELS } from "./setup.js";
 import { llamaSwapConfig, modelFile } from "./swapconfig.js";
 
@@ -44,6 +44,34 @@ export class Runtime {
     this.platform = this.reloadPlatform();
     this.llm = new LlmClient(this.config.llm_url);
     this.queue = new JobQueue((job, log, signal) => this.handle(job, log, signal));
+  }
+
+  /** Dashboards open right now, counted by their event streams. */
+  dashboards = 0;
+  private idleSince = Date.now();
+  private vmStopped = false;
+
+  /**
+   * True once, when no dashboard has been open and no job active for unload_after_min:
+   * time to stop the sandbox VM, which a job starts again when it needs it.
+   * Models unload on the same timer in llama-swap (its ttl), so nothing big keeps running.
+   * ponytail: an editor's MCP run_checks is not counted; its VM may stop mid-check if no dashboard is open.
+   */
+  idleVmStop(now = Date.now()): boolean {
+    if (this.dashboards > 0 || this.queue.hasActive()) { this.idleSince = now; this.vmStopped = false; return false; }
+    if (this.platform.sandbox.driver !== "lima" || this.vmStopped || now - this.idleSince < this.platform.resources.unload_after_min * 60_000) return false;
+    return (this.vmStopped = true);
+  }
+
+  /** `serve` runs this; tests don't. */
+  watchIdle(): void {
+    setInterval(() => {
+      if (!this.idleVmStop()) return;
+      const { vm } = this.platform.sandbox;
+      void limaState(vm)
+        .then(async (s) => { if (s === "Running") { await limaPower(vm, false); audit("system", "sandbox.idle-stop", { vm }, this.platform.name); } })
+        .catch((e: Error) => audit("system", "sandbox.idle-stop-failed", { vm, error: e.message }, this.platform.name));
+    }, 60_000).unref();
   }
 
   reloadPlatform(): Platform {

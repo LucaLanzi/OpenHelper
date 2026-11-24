@@ -67,6 +67,8 @@ Override with `./openhelper plan --tier S`. On machines that split a model betwe
 ./openhelper docs fetch cmake                       # repeat for each doc pack the project lists
 ./openhelper docs add-local cppreference ~/Downloads/html-book.zip   # packs you download by hand
 ./openhelper index fprime-billee
+./openhelper embeddings export fprime-billee   # copy the file to another machine, then there:
+./openhelper embeddings import FILE            # and rebuild its index; see README, "Search and embeddings"
 ./openhelper mine-evals fprime-billee          # eval tasks from your git history
 ```
 
@@ -87,20 +89,24 @@ On the second machine, run the same `scripts/setup.sh`. Then, so both machines k
 
 A machine that only runs agents can set `roles = ["node"]` in its `config.toml`.
 
-## From your phone
+## From another device (Tailscale)
 
-1. Install Tailscale on the desktop and the phone.
-2. In `workspace/config.toml` on the desktop, set `bind` to the desktop's Tailscale IP (`tailscale ip -4`).
-3. Restart the engine (Linux: `systemctl --user restart openhelper`; macOS: `launchctl kickstart -k gui/$(id -u)/dev.openhelper.engine`), then open `http://<tailscale-ip>:8740` on the phone.
+To open a machine's dashboard from your phone, laptop or another computer:
 
-From another device you can use and manage models, change a project's models and search, and export its embeddings. A few actions still need a browser on the desktop itself: the Setup page, adding or removing projects, doc packs, languages and platforms, importing embeddings, and restart or update. The desktop's own Tailscale address counts as local, so `http://<tailscale-ip>:8740` works there too.
+1. Install Tailscale on both devices and sign in to the same tailnet.
+2. In `workspace/config.toml` on the machine running OpenHelper, set `bind` to its Tailscale IP (`tailscale ip -4`). Never use `0.0.0.0`; the engine refuses it.
+3. Restart the engine (Linux: `systemctl --user restart openhelper`; macOS: `launchctl kickstart -k gui/$(id -u)/dev.openhelper.engine`).
+4. On the other device, open `http://<tailscale-ip>:8740` (or the MagicDNS name) and sign in with the token from `./openhelper token`. `./openhelper open` now prints this address instead of opening a browser.
+
+From another device you can use and manage models, change a project's models and search, and export its embeddings. A few actions still need a browser on the machine itself: the Setup page, adding or removing projects, doc packs, languages and platforms, importing embeddings, and restart, update or turn off. The desktop's own Tailscale address counts as local, so `http://<tailscale-ip>:8740` works there too.
 
 If Tailscale's coordination service is down, devices that are already connected usually keep working. As a fallback on your home network, bind to the desktop's LAN IP instead.
 
 ## Updating
 
 ```bash
-git pull && npm run build && systemctl --user restart openhelper   # or relaunch the launchd agent on macOS
+git pull && npm run build && systemctl --user restart openhelper                      # Linux
+git pull && npm run build && launchctl kickstart -k gui/$(id -u)/dev.openhelper.engine  # macOS
 ```
 
 Pinned versions in `versions.lock` only change when you change them. After a successful run on new versions, `scripts/pin.sh` records exactly what was built.

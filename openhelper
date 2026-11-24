@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ./openhelper install sets up this machine and opens the dashboard, where everything else lives.
 # ./openhelper open reopens it. ./openhelper token prints the sign-in token for another device.
+# ./openhelper stop turns it all off to save battery; ./openhelper start turns it back on.
 # Other commands go to the engine's CLI (./openhelper help). ./openhelper check is for developers.
 set -euo pipefail
 
@@ -22,6 +23,11 @@ case "${1:-help}" in
         scripts/install-prereqs.sh
         scripts/setup.sh "${PROFILE:-auto}"
         scripts/install-service.sh
+        use_node
+        exec node server/dist/cli.js open
+        ;;
+    start)
+        scripts/power.sh on
         use_node
         exec node server/dist/cli.js open
         ;;

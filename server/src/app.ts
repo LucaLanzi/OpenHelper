@@ -354,6 +354,17 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     };
   });
 
+  // Turning off ends this process too, so the dashboard can only say how to turn it back on.
+  app.post("/api/system/off", async (req) => {
+    localOnly(req);
+    if (rt.queue.hasActive()) throw new HttpError(409, "a job is running; cancel it or wait for it to finish first");
+    const { driver, vm } = rt.platform.sandbox;
+    if (driver === "lima" && (await limaState(vm)) === "Running") await limaPower(vm, false);
+    audit("user", "system.off");
+    runDetached("power.sh", ["off"]);
+    return { started: true };
+  });
+
   for (const [action, script] of [["restart", "restart.sh"], ["update", "update.sh"]] as const) {
     app.post(`/api/system/${action}`, async (req) => {
       localOnly(req);
@@ -508,7 +519,9 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     rt.queue.on("run", onRun);
     rt.queue.on("queue", onQueue);
     const ping = setInterval(() => reply.raw.write(": ping\n\n"), 20_000);
+    rt.dashboards++;
     req.raw.on("close", () => {
+      rt.dashboards--;
       clearInterval(ping);
       rt.queue.off("job", onJob);
       rt.queue.off("log", onLog);

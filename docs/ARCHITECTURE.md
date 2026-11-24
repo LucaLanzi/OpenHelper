@@ -8,6 +8,8 @@
 | `node server/dist/cli.js serve` | 127.0.0.1 or the Tailscale IP, port 8740 | API, dashboard, job queue, agents, checks, search, workflows, audit log |
 | Sandbox | none (network off) | Builds, tests and lints generated code |
 
+To save power, the heavy parts stop when idle. llama-swap unloads a model after `resources.unload_after_min` minutes without requests (its `ttl`). The engine counts open dashboards by their `/api/events` streams; once none has been open and no job has been active for the same time, it stops the Lima VM, and the next job starts it again. `./openhelper stop` (or **Turn off OpenHelper** on the System page) stops the VM and then both services with `scripts/power.sh off`; `./openhelper start` runs `scripts/power.sh on`.
+
 ## Control plane and data plane
 
 - **Control plane**: the dashboard and the `control` role. It can see and configure every platform it has a token for. Starting a workflow is a control-plane action.
@@ -64,5 +66,6 @@ workspace/      one user's data — never committed
   platforms/    one file per machine
   links.toml    which machine may hand work to which
   projects/     one file per project
+  exports/      embeddings exported for another machine
   plans/ jobs/ runs/ results/ index/ evals/ docs/ audit/ secrets/ state/ cache/
 ```

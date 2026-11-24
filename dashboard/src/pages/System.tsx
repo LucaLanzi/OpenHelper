@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { get, getToken, post, type JobSummary } from "../api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
 import { go } from "../router";
 
@@ -55,6 +56,32 @@ export function System() {
     }
   };
 
+  const [askOff, setAskOff] = useState(false);
+  const [off, setOff] = useState(false);
+  const turnOff = async () => {
+    setError(null);
+    setBusy("Off");
+    try {
+      await post("/system/off");
+      setOff(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+      setAskOff(false);
+    }
+  };
+
+  if (off)
+    return (
+      <section className="panel stack-s" role="status">
+        <h2>OpenHelper is off</h2>
+        <p>The sandbox VM, model server and engine have stopped. To turn it back on, run this on this machine:</p>
+        <pre>./openhelper start</pre>
+        <p className="small muted">It also starts again the next time you log in.</p>
+      </section>
+    );
+
   const i = info.data;
   return (
     <>
@@ -73,7 +100,19 @@ export function System() {
           <button disabled={Boolean(busy)} onClick={() => void rebuildSandbox()}>
             Rebuild sandbox
           </button>
+          <button className="danger" disabled={Boolean(busy)} onClick={() => setAskOff(true)}>
+            Turn off OpenHelper
+          </button>
         </div>
+        <p className="small muted">
+          To save battery, the sandbox VM stops by itself once no dashboard is open and no job has run for a while, and models unload on the same timer
+          (<code>unload_after_min</code> in the platform file). Turn off stops everything now.
+        </p>
+        {askOff && (
+          <ConfirmDialog title="Turn off OpenHelper?" label="Turn off" busy={busy === "Off"} onCancel={() => setAskOff(false)} onConfirm={() => void turnOff()}>
+            <p>This stops the sandbox VM, the model server and the engine. This dashboard stops working until you run <code>./openhelper start</code> on this machine.</p>
+          </ConfirmDialog>
+        )}
         {i?.log && (
           <pre className="small" style={{ overflowX: "auto" }}>
             {i.log}
