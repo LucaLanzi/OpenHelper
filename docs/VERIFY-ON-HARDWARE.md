@@ -1,6 +1,6 @@
 # Verifying OpenHelper on the reference hardware
 
-v0.0.1 has been run end to end on the M1 Pro MacBook (32 GB) with Qwen3-8B, on 2026-11-23; the results are below. The desktop (2080 Ti) and the larger models have not been run yet. Tick items as you go and note results in `workspace/results/`.
+v0.0.1 has been run end to end on the M1 Pro MacBook (32 GB) with Qwen3-8B, on 2026-11-23; the results are below. The desktop (2080 Ti) and the larger models have not been run yet. Tick items as you go; your own runs write their results to `workspace/results/`.
 
 ## What is known to work
 
@@ -26,7 +26,7 @@ v0.0.1 has been run end to end on the M1 Pro MacBook (32 GB) with Qwen3-8B, on 2
 
 ## Mac: the whole pipeline on Qwen3-8B (done for v0.0.1)
 
-M1 Pro, 32 GB, macOS, llama.cpp with Metal, Qwen3-8B Q4_K_M and Qwen3-Embedding-0.6B Q8, Lima sandbox. Both `@plan` and `@build` point at the Mac.
+M1 Pro, 32 GB, macOS, llama.cpp with Metal, Qwen3-8B Q4_K_M and Qwen3-Embedding-0.6B Q8, Lima sandbox. Both `@plan` and `@build` point at the Mac. Full measurements: [docs/results/2026-11-23-mac-qwen3-8b.md](results/2026-11-23-mac-qwen3-8b.md).
 
 - [x] `make install` and `make setup`; llama.cpp built with Metal; llama-swap 275
 - [x] Both models downloaded and pinned; `make models` shows them
