@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, post, setToken, type JobSummary, type LinksInfo } from "../api";
+import { PathField } from "../components/PathField";
 import { Diff, Empty, ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
 import { go, href } from "../router";
 
@@ -119,6 +120,33 @@ interface DocPackInfo {
   status: { fetched: boolean; files: number };
 }
 
+function AddLocalDocs({ id, homepage }: { id: string; homepage: string }) {
+  const toast = useToast();
+  const [path, setPath] = useState("");
+  const add = async () => {
+    try {
+      const j = await post<JobSummary>(`/docs/${id}/local`, { path });
+      toast(`Adding ${id}`);
+      go("jobs", j.id);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  return (
+    <div className="stack-s" style={{ minWidth: 240 }}>
+      <span className="small">
+        Download from <a href={homepage}>{homepage.replace(/^https?:\/\//, "")}</a>, then add it here.
+      </span>
+      <PathField label="File or folder" kind="file" value={path} onChange={setPath} placeholder="~/Downloads/docs.zip" />
+      <div>
+        <button onClick={() => void add()} disabled={!path.trim()}>
+          Add docs
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Library() {
   const toast = useToast();
   const docs = useLoad(() => get<DocPackInfo[]>("/docs"));
@@ -159,9 +187,7 @@ export function Library() {
                   {d.sources.length || d.local_command ? (
                     <button onClick={() => void fetchPack(d.id)}>{d.status.fetched ? "Fetch again" : "Fetch"}</button>
                   ) : (
-                    <span className="small">
-                      Download from <a href={d.homepage}>{d.homepage.replace(/^https?:\/\//, "")}</a>, then <code>make docs-add ID={d.id} FILE=path</code>
-                    </span>
+                    <AddLocalDocs id={d.id} homepage={d.homepage} />
                   )}
                 </td>
               </tr>

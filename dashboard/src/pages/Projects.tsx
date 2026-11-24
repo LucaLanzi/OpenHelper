@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { get, post, type JobSummary } from "../api";
-import { Empty, ErrorNote, PageHead, ago, useLoad, useToast } from "../components/ui";
+import { PathField } from "../components/PathField";
+import { ErrorNote, PageHead, ago, useLoad, useToast } from "../components/ui";
 import { useApp } from "../context";
 import { go } from "../router";
 
@@ -20,18 +21,53 @@ export function Projects() {
   return (
     <>
       <PageHead title="Projects" intro="A project is one or more of your repos plus the docs the model should cite. Each gets its own search index, eval tasks and scores." />
-      {projects.length === 0 ? (
-        <Empty title="No projects yet">
-          On this machine, run <code>make add-project REPO=~/code/your-repo</code>. It detects the languages and suggests doc packs.
-        </Empty>
-      ) : (
-        <div className="stack">
-          {projects.map((p) => (
-            <ProjectPanel key={p.name} name={p.name} onChange={reloadProjects} onUse={() => setProject(p.name)} />
-          ))}
-        </div>
-      )}
+      <div className="stack">
+        <AddRepo
+          onAdded={(name) => {
+            reloadProjects();
+            setProject(name);
+          }}
+        />
+        {projects.map((p) => (
+          <ProjectPanel key={p.name} name={p.name} onChange={reloadProjects} onUse={() => setProject(p.name)} />
+        ))}
+      </div>
     </>
+  );
+}
+
+function AddRepo({ onAdded }: { onAdded: (name: string) => void }) {
+  const toast = useToast();
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await post<{ project: { name: string }; job: JobSummary }>("/projects", { path });
+      toast(`Added ${r.project.name}; fetching its docs and building the index`);
+      onAdded(r.project.name);
+      go("jobs", r.job.id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel stack-s" aria-label="Add a repo">
+      <h2>Add a repo</h2>
+      <PathField label="Git repo" kind="folder" value={path} onChange={setPath} placeholder="~/code/my-repo" />
+      <ErrorNote error={error} />
+      <div className="row">
+        <button className="primary" onClick={() => void add()} disabled={busy || !path.trim()}>
+          Add repo
+        </button>
+      </div>
+    </section>
   );
 }
 

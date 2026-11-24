@@ -10,7 +10,8 @@ import type { Job } from "../src/jobs/queue.js";
 import { mineProject, saveTasks } from "../src/miner/mine.js";
 import { loadLanguages } from "../src/core/load.js";
 import type { WorkflowRun } from "../src/workflow/engine.js";
-import { REPO_ROOT, git, samplePythonRepo, tempWorkspace } from "./helpers.js";
+import { addLocalDocs } from "../src/index/docs.js";
+import { REPO_ROOT, git, samplePythonRepo, tempWorkspace, write } from "./helpers.js";
 import { startMockLlm, type MockLlm } from "./mock-llm.js";
 
 let mock: MockLlm;
@@ -241,6 +242,48 @@ describe("evals", () => {
       mock.dropChats = false;
     }
   }, 180_000);
+});
+
+describe("setup from the dashboard", () => {
+  const post = (url: string, payload: object, remoteAddress = "127.0.0.1") => a.app.inject({ method: "POST", url, headers: auth(), payload, remoteAddress });
+
+  it("adds a repo and builds its index in one step", async () => {
+    addLocalDocs("python-stdlib", write(wsDir, "docsrc/lib.md", "# lib\n"));
+    const r = await api<{ project: { languages: string[] }; job: Job }>("POST", "/api/projects", { path: samplePythonRepo(), name: "demo" });
+    expect(r.project.languages).toContain("python");
+    const done = await until(() => api<Job>("GET", `/api/jobs/${r.job.id}`), (x) => x.status === "done" || x.status === "failed");
+    expect(done.status).toBe("done");
+    const projects = await api<{ name: string; index: { chunks: number } | null }[]>("GET", "/api/projects");
+    expect(projects.find((p) => p.name === "demo")?.index?.chunks).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("explains a bad folder or name", async () => {
+    expect((await post("/api/projects", { path: wsDir })).statusCode).toBe(400);
+    expect((await post("/api/projects", { path: repo, name: "../evil" })).statusCode).toBe(400);
+  });
+
+  it("adds hand-downloaded docs", async () => {
+    const file = write(wsDir, "docsrc/book/page.md", "# page\n");
+    const j = (await post("/api/docs/cppreference/local", { path: file })).json() as Job;
+    const done = await until(() => api<Job>("GET", `/api/jobs/${j.id}`), (x) => x.status === "done" || x.status === "failed");
+    expect(done.output).toMatchObject({ files: 1 });
+    expect((await post("/api/docs/cppreference/local", { path: join(wsDir, "missing") })).statusCode).toBe(400);
+  });
+
+  it("keeps local paths away from other devices and from generic jobs", async () => {
+    for (const [url, payload] of [["/api/projects", { path: repo }], ["/api/docs/cppreference/local", { path: "/etc/hosts" }], ["/api/pick", { kind: "file" }]] as const) {
+      expect((await post(url, payload, "100.64.0.9")).statusCode).toBe(403);
+    }
+    expect(((await a.app.inject({ url: "/api/host", headers: auth(), remoteAddress: "100.64.0.9" })).json() as { local: boolean }).local).toBe(false);
+    for (const type of ["docs-local", "setup"]) {
+      expect((await post("/api/jobs", { type, project: "calc", input: { pack: "cppreference", path: "/etc/hosts" } })).statusCode).toBe(400);
+    }
+  });
+
+  it("reports the sandbox state", async () => {
+    expect(await api("GET", "/api/sandbox")).toMatchObject({ driver: "none", state: "none" });
+    expect((await post("/api/sandbox", { on: true })).statusCode).toBe(409);
+  });
 });
 
 describe("audit", () => {

@@ -107,10 +107,21 @@ class ContainerSandbox implements Sandbox {
   }
 }
 
+export async function limaState(vm: string): Promise<"Running" | "Stopped" | "missing"> {
+  const r = await exec("limactl", ["list", "--format", "{{.Status}}", vm], process.cwd(), baseEnv({}), 30_000);
+  return (/^(Running|Stopped)$/m.exec(r.output)?.[1] as "Running" | "Stopped" | undefined) ?? "missing";
+}
+
+export async function limaPower(vm: string, on: boolean): Promise<void> {
+  const r = await exec("limactl", on ? ["start", "--tty=false", vm] : ["stop", vm], process.cwd(), baseEnv({}), 5 * 60_000);
+  if (r.code !== 0) throw new Error(`could not ${on ? "start" : "stop"} the ${vm} VM: ${r.output.trim().split("\n").pop()}`);
+}
+
 /**
  * macOS: a Lima VM with containerd. `make sandbox-vm` creates Lima's default VM, whose containerd
  * runs rootless (plain `nerdctl`); a VM set up with system containerd needs `sudo nerdctl`.
  * Which one this VM has is detected once. The worktree must be under a writable Lima mount.
+ * A stopped VM is started when a job first needs it.
  */
 class LimaSandbox implements Sandbox {
   driver = "lima" as const;
@@ -122,9 +133,11 @@ class LimaSandbox implements Sandbox {
 
   private detect(): Promise<string[]> {
     // Ask for the image, not `nerdctl info`: that also succeeds on a VM whose containers live under sudo.
-    this.nerdctl ??= exec("limactl", ["shell", this.vm, "--", "nerdctl", "image", "inspect", this.image], process.cwd(), baseEnv({}), 60_000).then((r) =>
-      r.code === 0 ? ["nerdctl"] : ["sudo", "nerdctl"],
-    );
+    this.nerdctl ??= (async () => {
+      if ((await limaState(this.vm)) === "Stopped") await limaPower(this.vm, true);
+      const r = await exec("limactl", ["shell", this.vm, "--", "nerdctl", "image", "inspect", this.image], process.cwd(), baseEnv({}), 60_000);
+      return r.code === 0 ? ["nerdctl"] : ["sudo", "nerdctl"];
+    })();
     return this.nerdctl;
   }
 

@@ -24,12 +24,13 @@ import { apiToken } from "./core/secrets.js";
 import { apply, history, readConfigFile, restore, stage } from "./core/staging.js";
 import { render, safeEqual } from "./core/util.js";
 import { validateWorkflow } from "./core/workflow-def.js";
-import { openIndex } from "./index/build.js";
+import { expandHome, openIndex } from "./index/build.js";
 import { docStatus } from "./index/docs.js";
 import type { Job, JobType } from "./jobs/queue.js";
 import { loadTasks } from "./miner/mine.js";
+import { addProject, pickPath } from "./projects.js";
 import { Runtime } from "./runtime.js";
-import { makeSandbox } from "./sandbox/sandbox.js";
+import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
 import { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
 
@@ -167,6 +168,66 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       eval_tasks: loadTasks(p.name).length,
     })),
   );
+
+  // These read paths on this machine, so a token used from another device can't reach them.
+  const localOnly = (req: FastifyRequest) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip)) throw new HttpError(403, "open the dashboard on this machine to do this");
+  };
+
+  app.get("/api/host", async (req) => {
+    const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip);
+    return { local, picker: local && process.platform === "darwin" };
+  });
+
+  app.post("/api/pick", async (req) => {
+    localOnly(req);
+    if (process.platform !== "darwin") throw new HttpError(501, "type the path instead");
+    return { path: await pickPath(body<{ kind?: string }>(req).kind === "file" ? "file" : "folder") };
+  });
+
+  app.post("/api/projects", async (req) => {
+    localOnly(req);
+    const b = body<{ path?: string; name?: string }>(req);
+    if (!b.path?.trim()) bad("choose a folder");
+    let project;
+    try {
+      project = addProject(b.path.trim(), b.name);
+    } catch (e) {
+      bad((e as Error).message);
+    }
+    audit("user", "project.add", { project: project.name });
+    const job = rt.queue.create({ type: "setup", project: project.name, platform: rt.platform.name, model: "", input: {} });
+    rt.queue.start(job.id);
+    return { project, job };
+  });
+
+  app.post("/api/docs/:id/local", async (req) => {
+    localOnly(req);
+    const id = (req.params as { id: string }).id;
+    const path = body<{ path?: string }>(req).path?.trim();
+    if (!loadDocPacks().some((p) => p.id === id)) throw new HttpError(404, "no such doc pack");
+    if (!path) bad("choose a file or folder");
+    if (!existsSync(expandHome(path))) bad(`${path} does not exist`);
+    audit("user", "docs.add-local", { pack: id });
+    const job = rt.queue.create({ type: "docs-local", project: "", platform: rt.platform.name, model: "", input: { pack: id, path } });
+    rt.queue.start(job.id);
+    return job;
+  });
+
+  app.get("/api/sandbox", async () => {
+    const { driver, vm } = rt.platform.sandbox;
+    return { driver, state: driver === "lima" ? await limaState(vm) : driver === "none" ? "none" : "available" };
+  });
+
+  app.post("/api/sandbox", async (req) => {
+    const { driver, vm } = rt.platform.sandbox;
+    if (driver !== "lima") throw new HttpError(409, "only the Lima VM can be started and stopped here");
+    const on = body<{ on?: boolean }>(req).on === true;
+    if (!on && rt.queue.state().running) throw new HttpError(409, "a job is running; stop the VM after it finishes");
+    await limaPower(vm, on);
+    audit("user", on ? "sandbox.start" : "sandbox.stop", { vm });
+    return { driver, state: await limaState(vm) };
+  });
 
   app.post("/api/search", async (req) => {
     const b = body<{ project?: string; q?: string; k?: number }>(req);

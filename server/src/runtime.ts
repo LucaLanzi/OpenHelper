@@ -10,7 +10,7 @@ import { findProject, loadConfig, loadDocPacks, loadLanguages, loadModels, loadP
 import { ws } from "./core/paths.js";
 import type { CheckKind, Platform, WorkspaceConfig } from "./core/schemas.js";
 import { buildIndex, expandHome } from "./index/build.js";
-import { fetchDocPack } from "./index/docs.js";
+import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
 import { JobQueue, type Job } from "./jobs/queue.js";
 import { LlmClient } from "./llm/client.js";
 import { runEval } from "./miner/eval.js";
@@ -96,6 +96,11 @@ export class Runtime {
       if (!pack) throw new Error(`no doc pack ${id}`);
       return { files: await fetchDocPack(pack, log) };
     }
+    if (job.type === "docs-local") {
+      const files = addLocalDocs(String(job.input.pack), expandHome(String(job.input.path)));
+      log(`added ${files} files for ${String(job.input.pack)}; rebuild a project's index to use them`);
+      return { files };
+    }
     const ctx = this.ctx(job, log, signal);
     const s = (k: string) => (typeof job.input[k] === "string" ? (job.input[k] as string) : "");
     switch (job.type) {
@@ -130,11 +135,24 @@ export class Runtime {
           removeWorktree(repo, dir, branch);
         }
       }
-      case "index": {
-        const embed = this.platform.model.embed;
-        const meta = await buildIndex(ctx.project, { log, ...(embed ? { llm: this.llm, embedModel: embed } : {}) });
-        return { ...meta };
-      }
+      case "setup":
+        // A doc that can't be fetched shouldn't stop the repo from being searchable.
+        for (const id of ctx.project.docs) {
+          const pack = loadDocPacks().find((p) => p.id === id);
+          if (!pack || docStatus(pack).fetched) continue;
+          if (!pack.sources.length && !pack.local_command) {
+            log(`${id}: download it yourself, add it on the Library page, then rebuild the index`);
+            continue;
+          }
+          try {
+            log(`fetched ${await fetchDocPack(pack, log)} files for ${id}`);
+          } catch (e) {
+            log(`could not fetch ${id}: ${(e as Error).message}; continuing without it`);
+          }
+        }
+        return this.buildProjectIndex(ctx, log);
+      case "index":
+        return this.buildProjectIndex(ctx, log);
       case "mine": {
         const tasks = mineProject(ctx.project, ctx.languages, { limit: Number(job.input.limit ?? 100) });
         const file = saveTasks(ctx.project.name, tasks);
@@ -143,7 +161,7 @@ export class Runtime {
       }
       case "eval": {
         let tasks = loadTasks(ctx.project.name);
-        if (!tasks.length) throw new Error("no eval tasks; run `make mine-evals` first");
+        if (!tasks.length) throw new Error("no eval tasks; press Mine eval tasks on the Projects page first");
         const limit = Number(job.input.limit ?? 0);
         if (limit) tasks = tasks.slice(0, limit);
         return { ...(await runEval(ctx, tasks, ctx.languages)) };
@@ -151,6 +169,11 @@ export class Runtime {
       default:
         throw new Error(`unknown job type ${String(job.type)}`);
     }
+  }
+
+  private async buildProjectIndex(ctx: AgentContext, log: (s: string) => void): Promise<Record<string, unknown>> {
+    const embed = this.platform.model.embed;
+    return { ...(await buildIndex(ctx.project, { log, ...(embed ? { llm: this.llm, embedModel: embed } : {}) })) };
   }
 
   async status() {

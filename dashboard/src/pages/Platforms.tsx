@@ -65,6 +65,37 @@ function Wire({ a, b, links }: { a: string; b: string; links?: LinksInfo }) {
   );
 }
 
+function SandboxPower() {
+  const toast = useToast();
+  const vm = useLoad(() => get<{ state: string }>("/sandbox"));
+  const [busy, setBusy] = useState(false);
+  const running = vm.data?.state === "Running";
+
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      await post("/sandbox", { on: !running });
+      toast(running ? "Sandbox VM stopped; it starts again when a job needs it" : "Sandbox VM started");
+      vm.reload();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!vm.data) return <>Lima VM</>;
+  if (vm.data.state === "missing") return <>Lima VM not set up</>;
+  return (
+    <span className="row">
+      Lima VM {running ? "running" : "stopped"}
+      <button className="quiet" onClick={() => void toggle()} disabled={busy}>
+        {busy ? "Working…" : running ? "Stop" : "Start"}
+      </button>
+    </span>
+  );
+}
+
 function Machine({ p, self, onChange }: { p: PlatformInfo; self: string; onChange: () => void }) {
   const toast = useToast();
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -134,7 +165,7 @@ function Machine({ p, self, onChange }: { p: PlatformInfo; self: string; onChang
               </>
             )}
             <dt>Sandbox</dt>
-            <dd>{s?.sandbox === "none" ? "none (code is never run automatically)" : s?.sandbox}</dd>
+            <dd>{s?.sandbox === "none" ? "none (code is never run automatically)" : p.name === self && s?.sandbox === "lima" ? <SandboxPower /> : s?.sandbox}</dd>
           </dl>
           <hr />
           <div className="stack-s">

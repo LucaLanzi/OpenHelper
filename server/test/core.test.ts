@@ -436,6 +436,21 @@ describe("host sandbox", () => {
       process.env.PATH = path;
     }
   });
+  it("starts a stopped Lima VM when a job needs it", async () => {
+    const dir = tempWorkspace();
+    const calls = join(dir, "calls");
+    chmodSync(write(dir, "bin/limactl", `#!/bin/sh\necho "$*" >> "${calls}"\n[ "$1" = list ] && { echo Stopped; exit 0; }\nexit 0\n`), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${join(dir, "bin")}:${path}`;
+    try {
+      await makeSandbox(SandboxConfig.parse({ driver: "lima" })).run("true", dir, { timeoutMs: 5000 });
+      const log = readFileSync(calls, "utf8");
+      expect(log).toContain("start --tty=false openhelper");
+      expect(log.indexOf("start --tty=false")).toBeLessThan(log.indexOf("run --rm"));
+    } finally {
+      process.env.PATH = path;
+    }
+  });
   it("reports a sandbox that cannot run instead of skipping every check", async () => {
     tempWorkspace();
     const sandbox: Sandbox = { driver: "lima", run: async () => ({ code: 1, output: "no such image", timed_out: false, duration_ms: 0 }) };

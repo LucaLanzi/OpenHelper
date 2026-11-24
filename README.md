@@ -41,17 +41,9 @@ Open <http://127.0.0.1:8740> and paste the token. `workspace/` holds your privat
 
 ## Add a repo
 
-```bash
-make add-project REPO=~/code/my-repo    # prints the doc packs it suggests
-make docs-fetch ID=python-stdlib        # repeat for each pack
-make index PROJECT=my-repo              # re-run after large changes
-```
+On the **Projects** page, choose the repo's folder and press **Add repo**. OpenHelper detects its languages, fetches their docs and builds the search index. Press **Rebuild index** after large changes.
 
-Some packs, like `cppreference`, must be downloaded by hand from [their site](https://en.cppreference.com/w/Cppreference:Archives). Add the `.zip`, `.tar.*` or folder, then re-run `make index`:
-
-```bash
-make docs-add ID=cppreference FILE=~/Downloads/html-book.zip
-```
+Some docs, like `cppreference`, must be downloaded by hand from [their site](https://en.cppreference.com/w/Cppreference:Archives). Add the `.zip`, `.tar.*` or folder on the **Library** page, then rebuild the index.
 
 ## Use it
 
@@ -63,9 +55,9 @@ make docs-add ID=cppreference FILE=~/Downloads/html-book.zip
   git merge openhelper/<branch>
   ```
 
-- **Evals:** run `make mine-evals PROJECT=my-repo LIMIT=5`, then choose **Run the eval** on the Jobs page. It replays past commits with their tests hidden.
+- **Evals:** on the **Projects** page, press **Mine eval tasks**, then **Run eval**. It replays past commits with their tests hidden.
 
-Workflows and evals need the VM. Stop it to free memory with `make sandbox-vm STOP=1`, and start it with `limactl start openhelper`.
+The sandbox VM starts by itself when a job needs it. To free its memory, press **Stop** on the **Platforms** page.
 
 ## Add a language
 

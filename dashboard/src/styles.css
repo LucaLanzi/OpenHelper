@@ -100,7 +100,7 @@ small, .small { font-size: 13px; }
 .rail .spacer { flex: 1; }
 .rail .who { padding: var(--s2) var(--s3); color: var(--muted); font-size: 13px; }
 
-main { padding: var(--s6) var(--s6) 96px; max-width: 1120px; width: 100%; }
+main { padding: var(--s6) var(--s6) 96px; max-width: 1120px; width: 100%; min-width: 0; }
 .page-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s5); }
 .page-head p { margin-top: var(--s2); color: var(--muted); }
 
