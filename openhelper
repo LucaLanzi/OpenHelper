@@ -4,6 +4,10 @@
 # Other commands go to the engine's CLI (./openhelper help). ./openhelper check is for developers.
 set -euo pipefail
 
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) echo "On Windows, run OpenHelper inside WSL2 with Ubuntu (wsl --install), not in Git Bash or MSYS." >&2; exit 1 ;;
+esac
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$root"
 

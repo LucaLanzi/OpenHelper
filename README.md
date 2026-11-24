@@ -6,7 +6,13 @@ A coding assistant that runs on your own machines with an open-weight model. It 
 
 ## Install
 
-Needs macOS on Apple Silicon (Ubuntu with an NVIDIA GPU is untested), 16 GB of memory and 15 GB of disk.
+| | Supported | Before you start |
+| --- | --- | --- |
+| macOS | Apple Silicon | Nothing. The installer opens the Xcode tools installer and offers Homebrew. |
+| Linux | Ubuntu or Debian, NVIDIA GPU optional | For the GPU, `nvidia-smi` must already work. The CUDA toolkit is installed for you. |
+| Windows | WSL2 with Ubuntu (`wsl --install`) | NVIDIA driver installed in Windows. Clone inside WSL (`~`), not `/mnt/c`. |
+
+Every machine needs 16 GB of memory and 15 GB of free disk. Only macOS has been tested so far.
 
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git
@@ -14,9 +20,17 @@ cd OpenHelper
 ./openhelper install
 ```
 
-This installs everything, starts OpenHelper and opens the dashboard, already signed in. The **Setup** page then takes you through downloading the model (5.7 GB), setting up the sandbox and adding a repo.
+Run it as your normal user. It asks for `sudo` only to install system packages, and asks before large or optional ones. It builds llama.cpp, installs the engine as a user service and opens the dashboard, already signed in. The **Setup** page then downloads the model (5.7 GB), sets up the sandbox and adds a repo.
 
-To open the dashboard later, go to <http://127.0.0.1:8740>. If it asks you to sign in, run `./openhelper open`. `workspace/` holds your private data and is never committed.
+Options, set before the command, for example `JOBS=4 ./openhelper install`:
+
+- `JOBS=<n>`: compile jobs for llama.cpp. By default it runs as many as free memory allows. Lower it if the build runs out of memory.
+- `PROFILE=cpu`: build without GPU support.
+- `YES=1`: answer yes to every question. `SKIP_APT=1`, `SKIP_CUDA=1` and `SKIP_SANDBOX=1` skip those installs.
+
+On WSL, the services need systemd. If the installer says it is off, add `[boot]` and `systemd=true` to `/etc/wsl.conf`, then run `wsl --shutdown` in Windows and run the installer again.
+
+To open the dashboard later, go to <http://127.0.0.1:8740>, or run `./openhelper open` if it asks you to sign in. `workspace/` holds your private data and is never committed. Full details: [docs/SETUP.md](docs/SETUP.md).
 
 ## Add a project
 

@@ -43,6 +43,8 @@ if [[ $EUID -eq 0 ]]; then die "run this as your normal user (it asks for sudo w
 
 os="$(uname -s)"
 arch="$(uname -m)"
+wsl=""
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qsi microsoft /proc/sys/kernel/osrelease; then wsl=1; fi
 missing_after=()
 
 # ---------------------------------------------------------------------------- helpers: Linux
@@ -203,7 +205,11 @@ linux() {
     have apt-get || die "this installer supports Ubuntu/Debian (apt). On other distributions install: git cmake gcc g++ make curl python3 pipx nodejs>=$NODE_MAJOR shellcheck cppcheck clang-tidy bats"
     # shellcheck disable=SC1091
     . /etc/os-release 2>/dev/null || true
-    ok "${PRETTY_NAME:-Linux} ($arch)"
+    ok "${PRETTY_NAME:-Linux} ($arch)${wsl:+ in WSL}"
+    if [[ -n "$wsl" && "$here" == /mnt/* ]]; then
+        warn "OpenHelper is on a Windows drive ($here), where builds are slow and file permissions break."
+        warn "Clone it inside WSL instead, for example in ~/OpenHelper."
+    fi
     if [[ -z "${SKIP_APT:-}" ]]; then
         echo "  updating the package list (sudo)"
         sudo apt-get update -qq
@@ -229,6 +235,10 @@ linux() {
         else
             missing_after+=(nvidia-cuda-toolkit)
         fi
+    elif [[ -n "$wsl" ]]; then
+        warn "no working NVIDIA GPU in WSL (nvidia-smi failed). The driver comes from Windows:"
+        warn "install or update the NVIDIA driver in Windows, never inside WSL, then run wsl --shutdown and try again."
+        warn "Without it, llama.cpp builds for the CPU."
     elif lspci 2>/dev/null | grep -qi nvidia; then
         warn "an NVIDIA GPU is present but its driver is not working (nvidia-smi failed)."
         warn "Install the driver first:  sudo ubuntu-drivers install  then reboot and run scripts/install-prereqs.sh again."
@@ -350,6 +360,7 @@ macos() {
 case "$os" in
     Linux) linux ;;
     Darwin) macos ;;
+    MINGW*|MSYS*|CYGWIN*) die "on Windows, run OpenHelper inside WSL2 with Ubuntu (wsl --install), not in Git Bash or MSYS" ;;
     *) die "unsupported OS: $os" ;;
 esac
 

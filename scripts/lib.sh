@@ -38,6 +38,42 @@ arch_name() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# True inside Windows Subsystem for Linux, where OpenHelper runs as on Linux.
+is_wsl() { [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qsi microsoft /proc/sys/kernel/osrelease; }
+
+cpu_count() {
+    getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1
+}
+
+# Memory free for a build, in whole GB. Linux: MemAvailable. macOS: total memory minus 4 GB,
+# since macOS keeps most memory in caches and reports little as free.
+free_mem_gb() {
+    local kb bytes
+    if kb="$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null)" && [ -n "$kb" ]; then
+        echo $((kb / 1024 / 1024))
+    elif bytes="$(sysctl -n hw.memsize 2>/dev/null)" && [ -n "$bytes" ]; then
+        echo $((bytes / 1024 / 1024 / 1024 - 4))
+    else
+        echo 4
+    fi
+}
+
+# build_jobs_for <cpus> <free GB> <GB per job> — parallel compile jobs that fit in memory,
+# keeping 4 GB for the desktop. Between 1 and <cpus>.
+build_jobs_for() {
+    local jobs=$((($2 - 4) / $3))
+    [ "$jobs" -le "$1" ] || jobs="$1"
+    [ "$jobs" -ge 1 ] || jobs=1
+    echo "$jobs"
+}
+
+# build_jobs <GB per job> — how many compile jobs to run on this machine. JOBS=<n> overrides.
+# An unbounded `-j` runs one compiler per source file and can exhaust memory (CUDA's take GBs each).
+build_jobs() {
+    if [ -n "${JOBS:-}" ]; then echo "$JOBS"; return; fi
+    build_jobs_for "$(cpu_count)" "$(free_mem_gb)" "$1"
+}
+
 # Use a new enough Node.js even when an older one comes first on the PATH.
 if _oh_node_dir="$("$OH_ROOT/scripts/find-node.sh" 2>/dev/null)"; then
     PATH="$_oh_node_dir:$PATH"

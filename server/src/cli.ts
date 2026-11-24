@@ -133,7 +133,9 @@ async function main() {
       ensureApiToken();
       // In the fragment, so the code never reaches a server log.
       const url = `${base}/#/login/${newLoginCode()}`;
-      const opened = spawnSync(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" }).status === 0;
+      // wslview opens the Windows browser from WSL, where xdg-open is often missing.
+      const openers = process.platform === "darwin" ? ["open"] : ["xdg-open", "wslview"];
+      const opened = openers.some((cmd) => spawnSync(cmd, [url], { stdio: "ignore" }).status === 0);
       out(opened ? "Opened the dashboard in your browser." : `Open this link on this machine within 5 minutes:\n  ${url}`);
       return;
     }

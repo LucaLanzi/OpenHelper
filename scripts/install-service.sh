@@ -20,6 +20,12 @@ render() {
 
 case "$(os_name)" in
     linux)
+        if ! systemctl --user show-environment >/dev/null 2>&1; then
+            if is_wsl; then
+                die "systemd is off in this WSL distribution. Add [boot] systemd=true to /etc/wsl.conf, run wsl --shutdown in Windows, then run this again."
+            fi
+            die "systemd user services are not available (systemctl --user failed); start llama-swap and \`./openhelper serve\` yourself"
+        fi
         dir="$HOME/.config/systemd/user"
         mkdir -p "$dir"
         render "$OH_ROOT/templates/systemd/openhelper-llm.service" > "$dir/openhelper-llm.service"

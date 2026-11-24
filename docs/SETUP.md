@@ -4,7 +4,7 @@ This guide covers one machine, then adding a second, then reaching the dashboard
 
 ## Before you start
 
-`./openhelper install` installs everything in this table for you (Ubuntu/Debian with apt, or macOS with Homebrew), asking before each optional or large item. To install only the packages, run `scripts/install-prereqs.sh`. Options: `YES=1` (no questions), `SKIP_APT=1`, `SKIP_CUDA=1`, `SKIP_SANDBOX=1`.
+`./openhelper install` installs everything in this table for you (Ubuntu/Debian with apt, or macOS with Homebrew), asking before each optional or large item. On Windows, run it inside WSL2 with Ubuntu, which takes the Linux column; the NVIDIA driver comes from Windows, and the services need systemd (`[boot] systemd=true` in `/etc/wsl.conf`). To install only the packages, run `scripts/install-prereqs.sh`. Options: `YES=1` (no questions), `SKIP_APT=1`, `SKIP_CUDA=1`, `SKIP_SANDBOX=1`, and `JOBS=<n>` for the llama.cpp build (by default as many compile jobs as free memory allows, about 3 GB each for CUDA).
 
 | | Linux (desktop) | macOS (Apple Silicon) |
 | --- | --- | --- |

@@ -62,9 +62,11 @@ case "$PROFILE" in
     mac)     cmake_args+=(-DGGML_METAL=ON) ;;
     cpu)     ;;
 esac
-log "building llama.cpp ($ref) with: ${cmake_args[*]}"
+# Each CUDA compile job can use about 3 GB; C++ and Metal jobs about 1 GB.
+if [ "$PROFILE" = "desktop" ]; then jobs="$(build_jobs 3)"; else jobs="$(build_jobs 1)"; fi
+log "building llama.cpp ($ref) with $jobs parallel jobs (JOBS=<n> to change): ${cmake_args[*]}"
 cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" "${cmake_args[@]}"
-cmake --build "$LLAMA_DIR/build" -j --target llama-server llama-bench llama-cli
+cmake --build "$LLAMA_DIR/build" -j "$jobs" --target llama-server llama-bench llama-cli
 LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
 [ -x "$LLAMA_SERVER" ] || die "llama-server was not built"
 
