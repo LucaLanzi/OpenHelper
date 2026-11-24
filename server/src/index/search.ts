@@ -108,7 +108,7 @@ export class SearchIndex {
     public meta: IndexMeta,
     public chunks: Chunk[],
     private bm25: Bm25,
-    private vectors?: Float32Array,
+    public vectors?: Float32Array,
   ) {}
 
   static save(dir: string, meta: IndexMeta, chunks: Chunk[], vectors?: Float32Array): void {

@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, chmodSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { appendFileSync, chmodSync, cpSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { beforeEach, describe, expect, it } from "vitest";
 import { LlmClient } from "../src/llm/client.js";
 import { audit, readAudit, verifyAudit } from "../src/core/audit.js";
@@ -25,7 +26,7 @@ import { projectModel } from "../src/runtime.js";
 import { boilerplate, buildIndex } from "../src/index/build.js";
 import { liveEta } from "../src/index/estimate.js";
 import { walkFiles } from "../src/core/walk.js";
-import { EmbedCache, embedCacheFile } from "../src/index/embed-cache.js";
+import { EmbedCache, embedCacheFile, exportEmbeddings, importEmbeddings } from "../src/index/embed-cache.js";
 import { SearchIndex } from "../src/index/search.js";
 import { JobQueue } from "../src/jobs/queue.js";
 import { runChecks } from "../src/checks/runner.js";
@@ -604,6 +605,27 @@ describe("embedding cache", () => {
     const idx = SearchIndex.load(dir)!;
     const c = idx.chunks[3]!;
     expect(idx.search("anything", 1, vec(`${c.title}\n${c.text}`))[0]?.id).toBe(c.id);
+  });
+
+  it("exports embeddings that another machine imports, so its rebuild embeds nothing", async () => {
+    const p = project();
+    await buildIndex(p, { llm: fakeLlm().llm, embedModel: "e" });
+    const file = join(process.env.OPENHELPER_WORKSPACE!, "exports", "big.ohemb.gz");
+    expect(exportEmbeddings("big", file)).toMatchObject({ model: "e", count: 100 });
+
+    // The other machine: its own workspace, and the repo at a different path.
+    const moved = join(tempWorkspace(), "elsewhere", "repo");
+    cpSync(p.repos[0]!, moved, { recursive: true });
+    expect(importEmbeddings(file)).toEqual({ project: "big", model: "e", added: 100, already: 0 });
+    expect(importEmbeddings(file)).toMatchObject({ added: 0, already: 100 });
+    const later = fakeLlm();
+    expect(await buildIndex({ ...p, repos: [moved] }, { llm: later.llm, embedModel: "e" })).toMatchObject({ dims: 3 });
+    expect(later.calls).toEqual([]);
+
+    writeFileSync(file, gzipSync(gunzipSync(readFileSync(file)).subarray(0, -5)));
+    expect(() => importEmbeddings(file)).toThrow(/damaged/);
+    tempWorkspace();
+    expect(() => exportEmbeddings("missing", file)).toThrow(/no index/);
   });
 });
 

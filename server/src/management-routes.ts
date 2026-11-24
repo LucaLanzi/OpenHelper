@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -10,14 +11,18 @@ import { ws } from "./core/paths.js";
 import { Project } from "./core/schemas.js";
 import { resolvePlatform } from "./core/workflow-def.js";
 import { callHook, executeHook, ProjectSettings } from "./hooks.js";
+import { exportEmbeddings, importEmbeddings } from "./index/embed-cache.js";
 import { embeddingModel, estimateIndex, workload } from "./index/estimate.js";
-import { previewProject, removalPaths, removeProjectFiles, saveProject, validateProject } from "./project-management.js";
+import { expandHome } from "./index/build.js";
+import { previewProject, removalPaths, removeProjectFiles, saveProject, updateProject, validateProject } from "./project-management.js";
 import { apiOrigin, tailscaleStatus, testSsh, validatePlatform } from "./platform-management.js";
 import type { Runtime } from "./runtime.js";
 import type { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
 const fail = (statusCode:number,message:string): never => { throw Object.assign(new Error(message),{statusCode}); };
-const local = (r: FastifyRequest) => { if (!["127.0.0.1","::1","::ffff:127.0.0.1"].includes(r.ip)) fail(403,"Open the dashboard on this machine to change its registry or local paths"); };
+/** From this machine: loopback, or one of its own addresses, as when bind is its Tailscale IP. req.ip is the socket peer (no trustProxy). */
+export const isLocal = (r: FastifyRequest) => { const ip = r.ip.replace(/^::ffff:/,""); return ip === "127.0.0.1" || ip === "::1" || Object.values(networkInterfaces()).flat().some(i => i?.address === ip); };
+const local = (r: FastifyRequest) => { if (!isLocal(r)) fail(403,"Open the dashboard on this machine to change its registry or local paths"); };
 const idOf = (r: FastifyRequest) => z.string().regex(/^[a-z0-9_-]+$/).parse((r.params as {id:string}).id);
 const client = <T>(fn:()=>T):T => { try {return fn();} catch(e) { return fail(400,(e as Error).message); } };
 const active = (s:string) => ["running","waiting-approval"].includes(s);
@@ -39,6 +44,28 @@ export function managementRoutes(app: FastifyInstance, rt: Runtime, engine: Work
     const p = client(()=>validateProject(b.project));
     client(()=>saveProject(p)); audit("user","project.add",{project:p.name,platform:p.platform});
     return {project:p};
+  });
+  // These two read no paths a request names, so the token is enough and they work from another device.
+  app.put("/api/projects/:id/settings", async req => {
+    const id = idOf(req); project(id);
+    // Not Project.partial(): its defaults would blank every field the request leaves out.
+    const b = z.object({model:z.string().optional(),light_model:z.string().optional(),search:Project.shape.search.unwrap().optional(),embed_model:z.string().optional()}).strict().parse(req.body);
+    if (rt.queue.hasActive(id)) fail(409,"Wait for this project's running jobs to finish before changing its models");
+    const p = client(()=>updateProject(id,b)); audit("user","project.settings",{project:id,...b});
+    return {project:p};
+  });
+  app.post("/api/projects/:id/embeddings/export", async req => {
+    const id = idOf(req); project(id);
+    const file = join(ws.root(),"exports",`${id}-embeddings-${new Date().toISOString().slice(0,10)}.ohemb.gz`);
+    const r = client(()=>exportEmbeddings(id,file)); audit("user","embeddings.export",{project:id,model:r.model,count:r.count});
+    return {...r,path:file};
+  });
+  app.post("/api/embeddings/import", async req => {
+    local(req);
+    const path = expandHome(z.object({path:z.string().trim().min(1,"Choose an export file")}).parse(req.body).path);
+    if (!existsSync(path)) fail(400,`${path} does not exist`);
+    const r = client(()=>importEmbeddings(path)); audit("user","embeddings.import",{project:r.project,model:r.model,added:r.added});
+    return r;
   });
   app.post("/api/index/estimate", async req => {
     local(req);

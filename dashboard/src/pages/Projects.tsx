@@ -3,6 +3,7 @@ import { del, get, post, type IndexEstimate as Estimate, type JobSummary } from 
 import { ProjectSetup } from "../components/ProjectSetup";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IndexEstimate } from "../components/IndexEstimate";
+import { ProjectModels } from "../components/ProjectModels";
 import { ErrorNote, PageHead, ago, useLoad, useToast } from "../components/ui";
 import { useApp } from "../context";
 import { go } from "../router";
@@ -71,6 +72,7 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
   const [removal,setRemoval] = useState<{remove:string[];retain:string[];pending_jobs:number}|null>(null);
   const [removing,setRemoving] = useState(false);
   const [estimate,setEstimate] = useState<Estimate|null>(null);
+  const [editing,setEditing] = useState(false);
   const requestRemoval = async () => { try { setRemoval(await get(`/projects/${name}/removal`)); } catch(e) { setError((e as Error).message); } };
   const remove = async () => { setRemoving(true); try { const r=await del<{message:string}>(`/projects/${name}`);toast(r.message);setRemoval(null);onChange(); } catch(e){setError((e as Error).message);setRemoval(null);} finally{setRemoving(false);} };
   const estimateBuild = async () => { try {setEstimate(await get(`/projects/${name}/estimate`));} catch(e){setError((e as Error).message);} };
@@ -87,7 +89,7 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
       <table>
         <tbody>
           <tr><th scope="row">Execution</th><td>{p.platform || "This instance"} · {p.model || "Platform model"} · light: {p.light_model || "Project model"}</td></tr>
-          <tr><th scope="row">Indexing choices</th><td>{p.search} · exclusions: {p.exclude?.filter(Boolean).join(", ") || "defaults only"}</td></tr>
+          <tr><th scope="row">Indexing choices</th><td>{p.search}{p.search!=="keyword" && p.embed_model ? ` · ${p.embed_model}` : ""} · exclusions: {p.exclude?.filter(Boolean).join(", ") || "defaults only"}</td></tr>
           <tr>
             <th scope="row">Languages</th>
             <td>{p.languages.join(", ") || "detected when checks run"}</td>
@@ -100,7 +102,7 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
             <th scope="row">Search index</th>
             <td>
               {p.index
-                ? `${p.index.chunks.toLocaleString()} passages, ${p.index.dims ? "keywords and embeddings" : "keywords only"}, built ${ago(p.index.built_at)}${p.index.redactions ? `; ${p.index.redactions} secrets redacted` : ""}`
+                ? `${p.index.chunks.toLocaleString()} passages, ${p.index.dims ? `keywords and ${p.index.embed_model || ""} embeddings` : "keywords only"}, built ${ago(p.index.built_at)}${p.index.redactions ? `; ${p.index.redactions} secrets redacted` : ""}`
                 : "not built yet"}
             </td>
           </tr>
@@ -120,13 +122,17 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
           </tr>
         </tbody>
       </table>
+      {p.index && !p.index.dims && p.search==="hybrid" && <p className="small">This index has no embeddings yet. Rebuild it to run them.</p>}
+      {!!p.index?.dims && p.search!=="keyword" && p.embed_model && p.embed_model!==p.index.embed_model && <p className="small">This index was embedded with {p.index.embed_model}. Rebuild it to use {p.embed_model}.</p>}
       <ErrorNote error={error} />
+      {editing && <ProjectModels project={p} onSaved={onChange} onRebuild={()=>void estimateBuild()}/>}
       {estimate && <div className="stack-s"><IndexEstimate estimate={estimate}/><div className="row"><button className="primary" onClick={()=>{setEstimate(null);void run("index","Index build");}}>Confirm index build</button><button onClick={()=>setEstimate(null)}>Cancel build</button></div></div>}
       {removal && <ConfirmDialog title={`Remove project ${name}?`} busy={removing} onCancel={()=>setRemoval(null)} onConfirm={()=>void remove()}><p>Remove these local files and folders:</p><ul>{removal.remove.map(f=><li key={f}><code>{f}</code></li>)}</ul><p>{removal.pending_jobs} unstarted jobs will be canceled. Queued/running jobs and active workflows block removal.</p><p>Keep:</p><ul>{removal.retain.map(f=><li key={f}>{f}</li>)}</ul></ConfirmDialog>}
       <div className="row">
         <button className="primary" onClick={() => void estimateBuild()}>
           {p.index ? "Rebuild index" : "Build index"}
         </button>
+        <button aria-expanded={editing} onClick={()=>setEditing(e=>!e)}>Models and embeddings</button>
         <button onClick={() => void run("mine", "Task mining")}>Mine eval tasks</button>
         <button disabled={!p.eval_tasks} onClick={() => void run("eval", "Eval")}>
           Run eval

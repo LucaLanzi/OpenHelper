@@ -9,14 +9,11 @@ import { isSecretFile, scrub } from "../core/scrub.js";
 import { walkFiles } from "../core/walk.js";
 import type { LlmClient } from "../llm/client.js";
 import { chunkFile, type Chunk } from "./chunk.js";
-import { EmbedCache, embedCacheFile } from "./embed-cache.js";
+import { EmbedCache, embedCacheFile, embedInput } from "./embed-cache.js";
 import { docFiles, docTextDir } from "./docs.js";
 import { SearchIndex, type IndexMeta } from "./search.js";
 
 const EMBED_BATCH = 32;
-
-/** What the embedding model sees for a chunk; also the cache key, so changing it re-embeds everything. */
-const embedInput = (c: Chunk) => `${c.title}\n${c.text.replace(/\n{3,}/g, "\n\n")}`.slice(0, 4000);
 
 /** Lines on more than half of a doc pack's pages (menus, footers): noise for search, and costly to embed. */
 export function boilerplate(texts: string[]): Set<string> {

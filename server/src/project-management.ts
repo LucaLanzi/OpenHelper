@@ -40,6 +40,14 @@ export function saveProject(p: Project) {
   if (loadProjects().some(x => x.name === p.name) || existsSync(join(ws.projects(), `${p.name}.toml`))) throw new Error(`Project ${p.name} already exists`);
   writeFileAtomic(join(ws.projects(), `${p.name}.toml`), toToml(p));
 }
+/** Changes a saved project's models and search mode. Its index keeps the old embeddings until rebuilt. */
+export function updateProject(name: string, change: Partial<Pick<Project, "model" | "light_model" | "search" | "embed_model">>): Project {
+  const files = listFiles(ws.projects(), [".toml"]).filter(f => loadFile(Project, f).name === name);
+  if (files.length !== 1) throw new Error(`No single project file for ${name}`);
+  const p = validateProject({ ...loadFile(Project, files[0]!), ...change });
+  writeFileAtomic(files[0]!, toToml(p));
+  return p;
+}
 export function removalPaths(p: Project): string[] {
   // Find by parsed name, including legacy files whose basename differs.
   const configs = listFiles(ws.projects(), [".toml"]).filter(f => loadFile(Project,f).name === p.name);

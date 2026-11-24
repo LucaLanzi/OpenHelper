@@ -45,6 +45,7 @@ async function fixture(component,opts={}){
   else if(path==="/tailscale")value=opts.tailscale ?? {available:false,online:false,hostname:"",ipv4:"",message:"Tailscale is unavailable. Direct API connections also work."};
   else if(path.endsWith("/test"))value={reachable:false,message:"OpenHelper API unavailable; no work sent"};
   else if(path==="/jobs")value={id:"index-test"};
+  else if(path==="/embeddings/import")value={project:"demo",model:"embed",added:120,already:3};
   await route.fulfill({json:value});
  });
  await page.goto(`http://127.0.0.1:${port}/test/index.html?component=${component}`);return {page,calls};
@@ -66,6 +67,16 @@ try{
   const {page,calls}=await fixture("projects",{project:true});const remove=page.getByRole("button",{name:"Remove project",exact:true});await remove.click();const dialog=page.getByRole("dialog",{name:"Remove project demo?"});await dialog.waitFor();assert.match(await dialog.innerText(),/index\/demo/);assert.match(await dialog.innerText(),/Shared documentation and models/);assert.equal(await page.getByRole("button",{name:"Cancel",exact:true}).evaluate(e=>document.activeElement===e),true);
   await page.keyboard.press("Shift+Tab");assert.equal(await dialog.evaluate(d=>d.contains(document.activeElement)),true);await page.keyboard.press("Escape");await dialog.waitFor({state:"detached"});assert.equal(calls.some(c=>c.method==="DELETE"),false);assert.equal(await remove.evaluate(e=>document.activeElement===e),true);
   await remove.click();await page.getByRole("button",{name:"Confirm removal"}).click();await dialog.waitFor({state:"detached"});assert.equal(calls.find(c=>c.method==="DELETE").data.confirm,true);await page.close();
+ });
+ await test("a saved project's models and search change without setup, and imported embeddings lead to a rebuild",async()=>{
+  const {page,calls}=await fixture("projects",{project:true});await page.getByRole("button",{name:"Models and embeddings"}).click();
+  assert.equal(await page.getByRole("button",{name:"Export embeddings"}).isDisabled(),true);
+  await page.getByLabel("Search mode").selectOption("hybrid");await page.getByLabel("Embedding model").selectOption("embed");await page.getByLabel("Light / fast model").selectOption("main");
+  await page.getByRole("button",{name:"Save models and search"}).click();await page.getByText("Saved",{exact:false}).first().waitFor();
+  const saved=calls.find(c=>c.path==="/projects/demo/settings");assert.equal(saved.method,"PUT");assert.deepEqual(saved.data,{model:"main",light_model:"main",search:"hybrid",embed_model:"embed"});
+  await page.getByLabel("Embeddings file to import (.ohemb.gz)").fill("~/demo.ohemb.gz");await page.getByRole("button",{name:"Import embeddings"}).click();
+  await page.getByText("Added 120 embed embeddings",{exact:false}).waitFor();assert.equal(calls.find(c=>c.path==="/embeddings/import").data.path,"~/demo.ohemb.gz");
+  await page.getByRole("button",{name:"Confirm index build"}).waitFor();await page.close();
  });
  await test("deleting a model file needs confirmation and is blocked for a model in use",async()=>{
   const {page,calls}=await fixture("models");const rows=page.getByRole("row");

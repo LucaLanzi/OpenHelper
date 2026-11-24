@@ -84,6 +84,18 @@ rsync -av workspace/index/my-repo/ other:OpenHelper/workspace/index/my-repo/
 
 Then press **Use as main** on its **Models** page. An index needs the same embedding model on both machines. If the repo path differs, update `repos` under **Settings**. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
 
+## Embed on one machine, use on another
+
+Embeddings are the slow part of an index. You can run them on the machine with the faster GPU and move them to the other machine. Both machines need the same embedding model, and the repo can be at a different path on each.
+
+1. On the fast machine, open **Projects** → **Models and embeddings**, choose hybrid search and the embedding model, save, then rebuild the index.
+2. Press **Export embeddings**. It writes `workspace/exports/<project>-embeddings-<date>.ohemb.gz` and shows the `scp` command.
+3. On the other machine, open the same panel, choose the same embedding model, enter the file under **Embeddings file to import**, and press **Import embeddings**. It then offers the index rebuild, which embeds only chunks that changed since the export.
+
+From a terminal: `./openhelper embeddings export PROJECT [--out FILE]` and `./openhelper embeddings import FILE`, then `./openhelper index PROJECT`.
+
+The same panel changes a project's main, light and embedding models at any time. The index keeps using its old embeddings until you rebuild it.
+
 ## Connect another machine
 
 On the **Platforms** page, open **Connect another OpenHelper instance with Tailscale**. Enter the other machine's Tailscale name or IP (`tailscale ip -4` prints it), press **Check this address**, then save it with the name of the secret that holds its token. Any OS or hardware works. Agent hooks only allow the operations ticked for that machine, and only where a link allows it.

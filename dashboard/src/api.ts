@@ -188,7 +188,7 @@ export interface Project {
   repos: string[];
   languages: string[];
   docs: string[];
-  index: { chunks: number; built_at: string; dims: number; sources: Record<string, number>; redactions: number } | null;
+  index: { chunks: number; built_at: string; dims: number; embed_model?: string; sources: Record<string, number>; redactions: number } | null;
   eval_tasks: number;
 }
 

@@ -1,4 +1,5 @@
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
@@ -278,6 +279,15 @@ describe("setup from the dashboard", () => {
     for (const type of ["docs-local", "setup"]) {
       expect((await post("/api/jobs", { type, project: "calc", input: { pack: "cppreference", path: "/etc/hosts" } })).statusCode).toBe(400);
     }
+  });
+
+  it("counts this machine's own addresses as local, and lets other devices manage models", async () => {
+    // With bind set to the Tailscale IP, a browser on this machine connects from that IP, not loopback.
+    const own = Object.values(networkInterfaces()).flat().find((i) => i && !i.internal)?.address;
+    if (own) expect(((await a.app.inject({ url: "/api/host", headers: auth(), remoteAddress: own })).json() as { local: boolean }).local).toBe(true);
+    // Model routes take no local path; the token is enough. Bad input still fails, as a 400 rather than a 403.
+    expect((await post("/api/models/qwen3-8b-q4km/use", { role: "nope" }, "100.64.0.9")).statusCode).toBe(400);
+    expect((await post("/api/models/add", { url: "http://insecure" }, "100.64.0.9")).statusCode).toBe(400);
   });
 
   it("reports the sandbox state", async () => {

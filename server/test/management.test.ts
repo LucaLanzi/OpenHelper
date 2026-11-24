@@ -45,6 +45,25 @@ describe("guided project registration",()=>{
     const estimate=await request("GET","/api/projects/demo/estimate");expect(estimate.json().basis).toContain("historical");
   });
 });
+describe("changing a saved project's models and embeddings",()=>{
+  it("saves new models and search mode without touching other settings, and validates them",async()=>{
+    await request("POST","/api/projects/configure",configured());
+    const r=await request("PUT","/api/projects/demo/settings",{light_model:"qwen3-8b-q4km",search:"hybrid",embed_model:"qwen3-embedding-0.6b-q8"});
+    expect(r.statusCode).toBe(200);
+    expect(findProject("demo")).toMatchObject({light_model:"qwen3-8b-q4km",search:"hybrid",embed_model:"qwen3-embedding-0.6b-q8",model:"qwen3-8b-q4km",exclude:["private/**"]});
+    expect((await request("PUT","/api/projects/demo/settings",{embed_model:"qwen3-8b-q4km"})).statusCode).toBe(400);
+    expect((await request("PUT","/api/projects/demo/settings",{repos:["/elsewhere"]})).statusCode).toBe(400);
+    expect((await request("PUT","/api/projects/demo/settings",{search:"keyword"},"100.64.0.2")).statusCode).toBe(200);
+    expect((await request("PUT","/api/projects/missing/settings",{search:"keyword"})).statusCode).toBe(404);
+  });
+  it("refuses to export a keyword-only index and to import a file that is not an export",async()=>{
+    await request("POST","/api/projects/configure",configured());await buildIndex(findProject("demo"));
+    const ex=await request("POST","/api/projects/demo/embeddings/export");expect(ex.statusCode).toBe(400);expect(ex.json().error).toContain("no embeddings");
+    write(root,"junk.gz","not gzip");
+    expect((await request("POST","/api/embeddings/import",{path:join(root,"junk.gz")})).json().error).toContain("not an embeddings export");
+    expect((await request("POST","/api/embeddings/import",{path:join(root,"missing.gz")})).statusCode).toBe(400);
+  });
+});
 describe("safe project removal",()=>{
   beforeEach(async()=>{await request("POST","/api/projects/configure",configured());});
   it("requires authorization, local access, explicit confirmation, and an existing project",async()=>{

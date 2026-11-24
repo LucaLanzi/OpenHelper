@@ -14,7 +14,9 @@ import { HardwareInfo, type SandboxConfig } from "./core/schemas.js";
 import { ensureApiToken } from "./core/secrets.js";
 import { makePlan, TIERS, type Tier } from "./core/tiers.js";
 import { buildIndex } from "./index/build.js";
+import { embeddingModel } from "./index/estimate.js";
 import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
+import { exportEmbeddings, importEmbeddings } from "./index/embed-cache.js";
 import { LlmClient } from "./llm/client.js";
 import { mineProject, saveTasks, loadTasks } from "./miner/mine.js";
 import { addProject } from "./projects.js";
@@ -62,6 +64,8 @@ Projects
   add-project PATH [--name N]     register a repo as a project (detects languages, suggests doc packs)
   docs list | fetch ID | add-local ID PATH
   index PROJECT                   build the project's search index (repos + its doc packs)
+  embeddings export PROJECT [--out FILE]  write the index's embeddings to a .ohemb.gz file
+  embeddings import FILE          add exported embeddings to this machine's cache; then rebuild the index
   mine-evals PROJECT [--limit N]  build eval tasks from the project's git history
   check DIR [--sandbox docker]    run the language-pack checks on a directory
 
@@ -244,10 +248,30 @@ async function main() {
       const project = findProject(a._[1] ?? "");
       const cfg = loadConfig();
       const p = loadPlatforms().find((x) => x.name === cfg.self);
-      const embed = str(a, "embed", p?.model.embed ?? "");
+      const embed = str(a, "embed", p ? embeddingModel(project, p) : "");
       const meta = await buildIndex(project, { log: out, ...(embed ? { llm: new LlmClient(cfg.llm_url), embedModel: embed } : {}) });
       out(`indexed ${meta.chunks} chunks (${meta.dims ? `hybrid, ${meta.dims}-dim embeddings` : "keyword only"}), ${meta.redactions} secrets redacted`);
       return;
+    }
+
+    case "embeddings": {
+      const sub = a._[1];
+      if (sub === "export") {
+        const project = findProject(a._[2] ?? "").name;
+        const file = resolve(str(a, "out", `${project}-embeddings-${new Date().toISOString().slice(0, 10)}.ohemb.gz`));
+        const r = exportEmbeddings(project, file);
+        out(`wrote ${r.count} ${r.model} embeddings to ${file} (${(r.bytes / 1e6).toFixed(1)} MB)`);
+        out("Copy it to the other machine (scp), then run `./openhelper embeddings import FILE` there and rebuild the index.");
+        return;
+      }
+      if (sub === "import") {
+        if (!a._[2]) throw new Error("usage: embeddings import FILE");
+        const r = importEmbeddings(resolve(a._[2]));
+        out(`added ${r.added} ${r.model} embeddings from ${r.project} (${r.already} already here)`);
+        out(`Rebuild the index of a project that uses ${r.model} (\`./openhelper index PROJECT\`); it embeds only what changed since the export.`);
+        return;
+      }
+      throw new Error("usage: embeddings export PROJECT [--out FILE] | embeddings import FILE");
     }
 
     case "mine-evals": {

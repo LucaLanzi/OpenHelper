@@ -190,7 +190,8 @@ describe("languages", () => {
 
 describe("this machine only", () => {
   it("refuses every changing action from another device", async () => {
-    const urls = ["/api/models/add", "/api/models/qwen3-8b-q4km/download", "/api/models/qwen3-8b-q4km/use", "/api/models/qwen3-8b-q4km/bench", "/api/models/qwen3-8b-q4km/tune", "/api/languages", "/api/docs", "/api/projects/demo/detect", "/api/system/restart", "/api/system/update"];
+    // Model routes are left out on purpose: they take no local path, so they work over Tailscale (server.test.ts).
+    const urls = ["/api/languages", "/api/docs", "/api/projects/demo/detect", "/api/system/restart", "/api/system/update"];
     for (const url of urls) expect((await post(url, {}, "100.64.0.9")).statusCode, url).toBe(403);
     for (const type of ["model-download", "bench", "tune"]) expect((await post("/api/jobs", { type, project: "demo" })).statusCode).toBe(400);
   });
@@ -211,8 +212,7 @@ describe("deleting a downloaded model", () => {
     write(dirname(file), basename(file), "12345");
     write(dirname(file), `${basename(file)}.part`, "678");
     expect((await del(`/api/models/${spare.id}/file`, {})).statusCode).toBe(400);
-    expect((await del(`/api/models/${spare.id}/file`, { confirm: true }, "100.64.0.9")).statusCode).toBe(403);
-    const r = await del(`/api/models/${spare.id}/file`);
+    const r = await del(`/api/models/${spare.id}/file`, { confirm: true }, "100.64.0.9");
     expect(r.json()).toEqual({ ok: true, freed_bytes: 8 });
     expect(existsSync(file) || existsSync(`${file}.part`)).toBe(false);
     expect((await getJson<Row[]>("/api/models/all")).find((m) => m.id === spare.id)).toMatchObject({ present: false });

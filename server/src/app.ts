@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { managementRoutes, healthRecord, rememberHealth } from "./management-routes.js";
+import { isLocal, managementRoutes, healthRecord, rememberHealth } from "./management-routes.js";
 import { assertAgent } from "./hooks.js";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -190,7 +190,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   );
 
   // These read paths on this machine, so a token used from another device can't reach them.
-  const isLocal = (req: FastifyRequest) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip);
   const localOnly = (req: FastifyRequest) => {
     if (!isLocal(req)) throw new HttpError(403, "open the dashboard on this machine to do this");
   };
@@ -253,10 +252,10 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     }
   };
 
+  // Model routes name no local paths, so the token is enough: they work from another device over Tailscale.
   app.get("/api/models/all", async () => rt.modelsOverview());
 
   app.post("/api/models/add", async (req) => {
-    localOnly(req);
     const b = body<{ url?: string; name?: string; size_gb?: number; role?: string; license?: string }>(req);
     const role = ModelRole.safeParse(b.role ?? "main");
     if (!role.success) bad("role must be main, light, reviewer, draft or embed");
@@ -266,7 +265,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   });
 
   app.post("/api/models/:id/download", async (req) => {
-    localOnly(req);
     const m = clientError(() => findModel(paramId(req)));
     const url = body<{ url?: string }>(req).url?.trim();
     if (url && !url.startsWith("https://")) bad("the link must start with https://");
@@ -276,7 +274,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   });
 
   app.post("/api/models/:id/use", async (req) => {
-    localOnly(req);
     const role = body<{ role?: string }>(req).role;
     if (role !== "main" && role !== "light" && role !== "embed") bad("role must be main, light or embed");
     try {
@@ -290,7 +287,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
 
   // Frees disk space; the model stays listed so it can be downloaded again.
   app.delete("/api/models/:id/file", async (req) => {
-    localOnly(req);
     if (body<{ confirm?: boolean }>(req).confirm !== true) bad("confirm the deletion");
     const r = clientError(() => rt.deleteModelFile(paramId(req)));
     audit("user", "model.delete_file", { model: paramId(req), freed_bytes: r.freed_bytes });
@@ -299,7 +295,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
 
   for (const type of ["bench", "tune"] as const) {
     app.post(`/api/models/:id/${type}`, async (req) => {
-      localOnly(req);
       const info = rt.modelsOverview().find((m) => m.id === paramId(req));
       if (!info?.present) bad("download the model first");
       if (type === "tune" && !info.can_tune) bad("tuning is for MoE models on an NVIDIA GPU");
