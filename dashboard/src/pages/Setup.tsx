@@ -119,19 +119,19 @@ export function Setup() {
               ))}
           </Step>
 
-          <Step n={3} title="Add a repo" done={s.indexed > 0}>
+          <Step n={3} title="Add a project" done={s.indexed > 0}>
             {s.indexed > 0 ? (
               <p className="small muted">
-                {s.indexed} {s.indexed === 1 ? "repo" : "repos"} ready. <a href={href("projects")}>Add another</a>.
+                {s.indexed} {s.indexed === 1 ? "project" : "projects"} ready. <a href={href("projects")}>Add another</a>.
               </p>
             ) : s.projects > 0 ? (
               <p className="small muted">
-                Your repo isn't searchable yet. Build its index on the <a href={href("projects")}>Projects</a> page.
+                Your project isn't searchable yet. Build its index on the <a href={href("projects")}>Projects</a> page.
               </p>
             ) : (
               <div>
                 <button className="primary" onClick={() => go("projects")}>
-                  Choose a repo
+                  Set up a project
                 </button>
               </div>
             )}

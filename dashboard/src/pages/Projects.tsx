@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { get, post, type JobSummary } from "../api";
-import { PathField } from "../components/PathField";
+import { del, get, post, type IndexEstimate as Estimate, type JobSummary } from "../api";
+import { ProjectSetup } from "../components/ProjectSetup";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { IndexEstimate } from "../components/IndexEstimate";
 import { ErrorNote, PageHead, ago, useLoad, useToast } from "../components/ui";
 import { useApp } from "../context";
 import { go } from "../router";
@@ -22,7 +24,7 @@ export function Projects() {
     <>
       <PageHead title="Projects" intro="A project is one or more of your repos plus the docs the model should cite. Each gets its own search index, eval tasks and scores." />
       <div className="stack">
-        <AddRepo
+        <ProjectSetup
           onAdded={(name) => {
             reloadProjects();
             setProject(name);
@@ -33,41 +35,6 @@ export function Projects() {
         ))}
       </div>
     </>
-  );
-}
-
-function AddRepo({ onAdded }: { onAdded: (name: string) => void }) {
-  const toast = useToast();
-  const [path, setPath] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const add = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await post<{ project: { name: string }; job: JobSummary }>("/projects", { path });
-      toast(`Added ${r.project.name}; fetching its docs and building the index`);
-      onAdded(r.project.name);
-      go("jobs", r.job.id);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="panel stack-s" aria-label="Add a repo">
-      <h2>Add a repo</h2>
-      <PathField label="Git repo" kind="folder" value={path} onChange={setPath} placeholder="~/code/my-repo" />
-      <ErrorNote error={error} />
-      <div className="row">
-        <button className="primary" onClick={() => void add()} disabled={busy || !path.trim()}>
-          Add repo
-        </button>
-      </div>
-    </section>
   );
 }
 
@@ -101,6 +68,12 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
     }
   };
 
+  const [removal,setRemoval] = useState<{remove:string[];retain:string[];pending_jobs:number}|null>(null);
+  const [removing,setRemoving] = useState(false);
+  const [estimate,setEstimate] = useState<Estimate|null>(null);
+  const requestRemoval = async () => { try { setRemoval(await get(`/projects/${name}/removal`)); } catch(e) { setError((e as Error).message); } };
+  const remove = async () => { setRemoving(true); try { const r=await del<{message:string}>(`/projects/${name}`);toast(r.message);setRemoval(null);onChange(); } catch(e){setError((e as Error).message);setRemoval(null);} finally{setRemoving(false);} };
+  const estimateBuild = async () => { try {setEstimate(await get(`/projects/${name}/estimate`));} catch(e){setError((e as Error).message);} };
   const latest = results.data?.[0];
   return (
     <section className="panel stack-s" aria-label={p.name}>
@@ -113,12 +86,14 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
       <p className="small muted">{p.repos.join(", ")}</p>
       <table>
         <tbody>
+          <tr><th scope="row">Execution</th><td>{p.platform || "This instance"} · {p.model || "Platform model"} · light: {p.light_model || "Project model"}</td></tr>
+          <tr><th scope="row">Indexing choices</th><td>{p.search} · exclusions: {p.exclude?.filter(Boolean).join(", ") || "defaults only"}</td></tr>
           <tr>
             <th scope="row">Languages</th>
             <td>{p.languages.join(", ") || "detected when checks run"}</td>
           </tr>
           <tr>
-            <th scope="row">Doc packs</th>
+            <th scope="row">Documentation</th>
             <td>{p.docs.join(", ") || "none"}</td>
           </tr>
           <tr>
@@ -146,8 +121,10 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
         </tbody>
       </table>
       <ErrorNote error={error} />
+      {estimate && <div className="stack-s"><IndexEstimate estimate={estimate}/><div className="row"><button className="primary" onClick={()=>{setEstimate(null);void run("index","Index build");}}>Confirm index build</button><button onClick={()=>setEstimate(null)}>Cancel build</button></div></div>}
+      {removal && <ConfirmDialog title={`Remove project ${name}?`} busy={removing} onCancel={()=>setRemoval(null)} onConfirm={()=>void remove()}><p>Remove these local files and folders:</p><ul>{removal.remove.map(f=><li key={f}><code>{f}</code></li>)}</ul><p>{removal.pending_jobs} unstarted jobs will be canceled. Queued/running jobs and active workflows block removal.</p><p>Keep:</p><ul>{removal.retain.map(f=><li key={f}>{f}</li>)}</ul></ConfirmDialog>}
       <div className="row">
-        <button className="primary" onClick={() => void run("index", "Index build")}>
+        <button className="primary" onClick={() => void estimateBuild()}>
           {p.index ? "Rebuild index" : "Build index"}
         </button>
         <button onClick={() => void run("mine", "Task mining")}>Mine eval tasks</button>
@@ -155,6 +132,7 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
           Run eval
         </button>
         <button onClick={() => void run("check", "Checks")}>Run checks</button>
+        <button className="danger" onClick={()=>void requestRemoval()}>Remove project</button>
         <button className="quiet" onClick={() => void detect()}>
           Detect languages
         </button>

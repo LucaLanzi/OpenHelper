@@ -55,7 +55,7 @@ export function Ask() {
       <>
         <PageHead title="Ask" />
         <Empty title="Add a project first">
-          Answers come from your own code and docs. Add a repo on the <a href={href("projects")}>Projects</a> page.
+          Answers come from your own code and docs. Add a project on the <a href={href("projects")}>Projects</a> page.
         </Empty>
       </>
     );

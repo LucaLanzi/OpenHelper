@@ -261,3 +261,13 @@ pre { margin: 0; padding: var(--s3); background: var(--sunk); border-radius: 6px
   .streaming::after { content: "▍"; animation: blink 1s steps(2) infinite; color: var(--muted); }
   @keyframes blink { 50% { opacity: 0; } }
 }
+
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; margin: 12px 0; }
+.setup-steps { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
+.setup-steps li { padding: 6px 10px; border: 1px solid var(--rule); border-radius: 6px; }
+.setup-steps [aria-current="step"] { font-weight: bold; border-width: 2px; }
+dialog { max-width: min(680px, 90vw); max-height: 85vh; overflow: auto; color: inherit; background: var(--panel); border-radius: 12px; padding: 24px; }
+dialog::backdrop { background: #0008; }
+input[type="checkbox"] { width: auto; }
+summary { cursor: pointer; padding: 8px 0; }
+fieldset { border: 1px solid var(--rule); border-radius: 8px; padding: 16px; }

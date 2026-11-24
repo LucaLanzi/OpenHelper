@@ -37,7 +37,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void get<Project[]>("/projects")
       .then((ps) => {
         setProjects(ps);
-        if (ps.length && !ps.some((p) => p.name === project)) setProjectState(ps[0]!.name);
+        if (!ps.some((p) => p.name === project)) setProjectState(ps[0]?.name ?? "");
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

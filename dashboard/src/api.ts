@@ -57,6 +57,7 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
 
 export const get = <T>(p: string) => api<T>("GET", p);
 export const post = <T>(p: string, b: unknown = {}) => api<T>("POST", p, b);
+export const del = <T>(p: string, b: unknown = { confirm: true }) => api<T>("DELETE", p, b);
 export const put = <T>(p: string, b: unknown) => api<T>("PUT", p, b);
 
 /** Calls a platform's node API: directly for this machine, through the control plane for others. */
@@ -117,6 +118,18 @@ export interface Status {
 }
 
 export interface PlatformInfo {
+  display_name: string;
+  connection: string;
+  tailscale_hostname: string;
+  tailscale_ipv4: string;
+  token_ref: string;
+  ssh: { host: string; port: number; user: string; auth_ref: string };
+  agents: string[];
+  hooks: string[];
+  sandbox: { driver: string; image: string; vm: string };
+  auto_run: boolean;
+  measured: Record<string, string | number | boolean>;
+  last_success?: string;
   name: string;
   description: string;
   url: string;
@@ -149,6 +162,7 @@ export interface JobSummary {
   started_at?: string;
   finished_at?: string;
   error?: string;
+  progress?: IndexProgress;
   confidence: Confidence | null;
   origin?: { run_id?: string; step?: string; from_platform?: string };
 }
@@ -161,6 +175,14 @@ export interface Job extends Omit<JobSummary, "confidence"> {
 }
 
 export interface Project {
+  platform: string;
+  model: string;
+  light_model: string;
+  search: string;
+  embed_model: string;
+  exclude: string[];
+  language_mode: string;
+  checks?: string[];
   name: string;
   description: string;
   repos: string[];
@@ -208,4 +230,20 @@ export interface LinksInfo {
   kill_switch: boolean;
   links: { from: string; to: string; mode: string; budget: { max_hops: number; max_tokens: number; max_wall_min: number } }[];
   matrix: { from: string; to: string; allowed: boolean; reason: string }[];
+}
+
+export interface DocPackInfo {
+  id: string; name: string; version: string; license: string; sources: unknown[];
+  local_command: string; homepage: string; notes: string; status: { fetched: boolean; files: number };
+}
+export interface LanguageInfo {
+  id: string; name: string; detect: string[]; checks: string[]; sandbox: string;
+  details: { id: string; name: string; kind: string; requires: string[]; when_files: string[] }[];
+}
+export interface IndexEstimate {
+  platform: string; min_s: number; max_s: number; basis: string; confidence: string; explanation: string;
+}
+export interface IndexProgress {
+  phase: string; files_discovered: number; files_processed: number; chunks: number;
+  embeddings_completed: number; elapsed_ms: number; eta_min_s: number; eta_max_s: number;
 }
