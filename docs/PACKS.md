@@ -86,7 +86,7 @@ subdir = "doc/api"
 
 The GNU packs use this: when gnu.org does not answer, they take the manual from the release tarball on GNU's mirrors (Bash's HTML reference manual, Make's Info files, which are indexed as text).
 
-Alternatives to `sources`: `local_command` (index the output of a command, such as `cmake --help-full`), or `openhelper docs add-local <id> <path>` for docs you downloaded yourself. Doc content is never bundled in this repo.
+Alternatives to `sources`: `local_command` (index the output of a command, such as `cmake --help-full`), or `make docs-add ID=<id> FILE=<path>` for docs you downloaded yourself. Doc content is never bundled in this repo.
 
 ## Workflows (`packs/workflows/<name>.yaml`) and templates
 

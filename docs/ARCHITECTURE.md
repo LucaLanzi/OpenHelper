@@ -5,7 +5,7 @@
 | Process | Listens on | Does |
 | --- | --- | --- |
 | `llama-swap` | 127.0.0.1:8741 | Starts `llama-server` for whichever model a request names; one chat model loaded at a time, the embedding model kept alongside |
-| `openhelper serve` | 127.0.0.1 or the Tailscale IP, port 8740 | API, dashboard, job queue, agents, checks, search, workflows, audit log |
+| `node server/dist/cli.js serve` | 127.0.0.1 or the Tailscale IP, port 8740 | API, dashboard, job queue, agents, checks, search, workflows, audit log |
 | Sandbox | none (network off) | Builds, tests and lints generated code |
 
 ## Control plane and data plane

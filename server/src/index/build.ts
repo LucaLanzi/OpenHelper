@@ -58,7 +58,8 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     const pack = packs.find((p) => p.id === id);
     const dir = docTextDir(id);
     if (!pack || !existsSync(dir)) {
-      log(`doc pack ${id} not fetched yet; run \`openhelper docs fetch ${id}\``);
+      const manual = pack && !pack.sources.length && !pack.local_command;
+      log(`doc pack ${id} not fetched yet; run \`${manual ? `make docs-add ID=${id} FILE=path` : `make docs-fetch ID=${id}`}\``);
       continue;
     }
     const src = `doc:${id}`;

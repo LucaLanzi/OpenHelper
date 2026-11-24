@@ -475,6 +475,14 @@ describe("setup scripts", () => {
     expect(out).toContain("npm test");
     expect(out).not.toContain("npm install");
   });
+  it("make docs-add expands ~ and keeps a path with spaces together", () => {
+    const dir = tempWorkspace();
+    for (const f of ["package.json", "server/package.json", "dashboard/package.json"]) write(dir, f, "{}");
+    mkdirSync(join(dir, "node_modules"));
+    writeFileSync(join(dir, "Makefile"), readFileSync(join(REPO_ROOT, "Makefile")));
+    const out = execFileSync("make", ["-n", "docs-add", "ID=cppreference", "FILE=~/My Docs/book.zip"], { cwd: dir, encoding: "utf8", env: { ...process.env, HOME: "/home/me" } });
+    expect(out).toContain('docs add-local cppreference "/home/me/My Docs/book.zip"');
+  });
   it("picks the nerdctl that has the sandbox image", () => {
     const dir = tempWorkspace();
     // Plain `nerdctl info` always works; the image exists under sudo only when SUDO_IMAGE=0.
@@ -495,6 +503,13 @@ describe("doc packs", () => {
     const file = write(dir, "big.md", "x".repeat(600 * 1024));
     expect(addLocalDocs("big", file)).toBe(1);
     expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
+  });
+  it("names the right make command for a pack that has not been added", async () => {
+    tempWorkspace();
+    const lines: string[] = [];
+    await buildIndex(ProjectSchema.parse({ name: "calc", repos: [samplePythonRepo()], docs: ["cppreference", "python-stdlib"] }), { log: (s) => lines.push(s) });
+    expect(lines.join("\n")).toContain("make docs-add ID=cppreference FILE=path");
+    expect(lines.join("\n")).toContain("make docs-fetch ID=python-stdlib");
   });
 });
 

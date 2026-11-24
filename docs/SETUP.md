@@ -67,11 +67,12 @@ Override with `make plan TIER=S`. On machines that split a model between GPU and
 make add-project REPO=~/code/fprime-billee
 make docs-list
 make docs-fetch ID=cmake                       # repeat for each doc pack the project lists
+make docs-add ID=cppreference FILE=~/Downloads/html-book.zip   # packs you download by hand
 make index PROJECT=fprime-billee
 make mine-evals PROJECT=fprime-billee          # eval tasks from your git history
 ```
 
-Then run the eval from the dashboard's Projects page.
+Then choose **Run the eval** on the dashboard's Jobs page.
 
 ## A second machine
 

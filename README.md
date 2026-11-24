@@ -1,48 +1,25 @@
 # OpenHelper
 
-A coding assistant that runs on your own machines with an open-weight model. It indexes your repos and docs, answers with citations, plans and makes changes on a separate branch, and checks them in a sandbox with the network off.
+A coding assistant that runs on your own machines with an open-weight model. It answers from your repos and docs with citations, makes changes on a separate branch, and checks them in a sandbox with no network.
 
-**v0.0.1 status.** Run end to end on an M1 Pro MacBook (32 GB) with Qwen3-8B on 2026-11-23. Not yet run on Linux, with larger models, or across two real machines.
+**v0.0.1** is tested on an M1 Pro MacBook (32 GB) with Qwen3-8B, and not yet on Linux, larger models or two machines. On that Mac it generates 25 tokens/s, passed 5 of 5 small single-file evals and 0 of 5 harder multi-file ones. "Checked" means the repo's own checks passed, not that the change is right, so read every diff. [Full results](docs/results/2026-11-23-mac-qwen3-8b.md).
 
-| Measured on that Mac | Result |
-| --- | --- |
-| Generation speed | 25 tokens/s |
-| Prompt speed | 202–225 tokens/s |
-| Question with citations | about 20 s |
-| Plan, implement and review a small two-file change | about 4 min |
-| Eval on small single-file tasks | 5 of 5 passed |
-| Eval on harder multi-file tasks in this repo | 0 of 5 passed |
+## Install
 
-The 8B model is useful for questions and small changes. **"Checked" means the repo's own checks passed, not that the change is right**, so read every diff.
-
-## Requirements
-
-- macOS on Apple Silicon, or Ubuntu 24.04 with an NVIDIA GPU (not yet tested)
-- 16 GB of memory or more for the 8B model
-- About 15 GB of free disk for the 8B setup and sandbox
-
-`make install` installs the rest: build tools, Node.js 22, check tools and Lima or Podman. It never installs GPU drivers.
-
-## 1. Install
+Needs macOS on Apple Silicon (Ubuntu with an NVIDIA GPU is untested), 16 GB of memory and 15 GB of disk.
 
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git
 cd OpenHelper
 make install
-```
 
-This builds llama.cpp and the engine, creates `workspace/` and prints a plan for your hardware. `workspace/` holds your private data and is never committed.
-
-## 2. Download a model
-
-```bash
 make download-model ID=qwen3-8b-q4km \
   URL=https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
 make download-model ID=qwen3-embedding-0.6b-q8 \
   URL=https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
 ```
 
-Each file's SHA-256 is recorded when it first downloads. Then set the models in `workspace/platforms/<machine>.toml` (`mac` on a Mac):
+Set the models in `workspace/platforms/<machine>.toml`:
 
 ```toml
 [model]
@@ -51,178 +28,124 @@ light = "qwen3-8b-q4km"
 embed = "qwen3-embedding-0.6b-q8"
 ```
 
+Then start everything:
+
 ```bash
 make llama-swap-config
-```
-
-## 3. Set up the sandbox
-
-```bash
 make sandbox-vm
-```
-
-This creates the Lima VM on macOS (or builds the image with Podman or Docker on Linux) and offers to turn the sandbox on. Stop the VM to free memory with `make sandbox-vm STOP=1`. See [docs/SANDBOX.md](docs/SANDBOX.md).
-
-## 4. Start the services and open the dashboard
-
-```bash
 make install-service
-curl http://127.0.0.1:8740/api/health
 make token
 ```
 
-Open <http://127.0.0.1:8740> and paste the token. Logs are in `workspace/logs/`.
+Open <http://127.0.0.1:8740> and paste the token. `workspace/` holds your private data and is never committed.
 
-## 5. Add a repo
+## Add a repo
 
 ```bash
 make add-project REPO=~/code/my-repo    # prints the doc packs it suggests
-make docs-fetch ID=python-stdlib        # repeat for each suggested pack
-make index PROJECT=my-repo
+make docs-fetch ID=python-stdlib        # repeat for each pack
+make index PROJECT=my-repo              # re-run after large changes
 ```
 
-Re-run `make index` after large changes to the repo. Your checkout is never edited: work happens in separate worktrees.
-
-## 6. Ask a question
-
-On the **Ask** page, pick the project and ask. Answers cite passages like `S1`, listed under the answer.
-
-## 7. Make a change
-
-1. On **Workflows**, run `implement-feature` with a small, specific task. Name the files.
-2. Read and edit the plan, then approve it.
-3. The model edits a new branch and runs the checks in the sandbox, repairing failures up to twice.
-4. Read the review and approve or reject it.
-5. Inspect the branch and merge it yourself:
+Some packs, like `cppreference`, must be downloaded by hand from [their site](https://en.cppreference.com/w/Cppreference:Archives). Add the `.zip`, `.tar.*` or folder, then re-run `make index`:
 
 ```bash
-git diff main...openhelper/<branch>
-git merge openhelper/<branch>
+make docs-add ID=cppreference FILE=~/Downloads/html-book.zip
 ```
 
-## 8. Measure a model on your code
+## Use it
 
-```bash
-make mine-evals PROJECT=my-repo LIMIT=5
-```
+- **Ask:** pick a project and ask a question.
+- **Workflows:** run `implement-feature` with a small task that names the files. Approve the plan, read the review, then merge the branch yourself:
 
-Skim `workspace/evals/my-repo/tasks.jsonl`, then run the eval from the **Jobs** page ("Run the eval"). It replays past commits with their tests hidden and reports the pass rate. Results are in `workspace/results/my-repo/`.
+  ```bash
+  git diff main...openhelper/<branch>
+  git merge openhelper/<branch>
+  ```
 
-## Add a language pack
+- **Evals:** run `make mine-evals PROJECT=my-repo LIMIT=5`, then choose **Run the eval** on the Jobs page. It replays past commits with their tests hidden.
+
+Workflows and evals need the VM. Stop it to free memory with `make sandbox-vm STOP=1`, and start it with `limactl start openhelper`.
+
+## Add a language
 
 Create `workspace/packs/languages/rust.toml`:
 
 ```toml
 id = "rust"
 name = "Rust"
-detect = ["Cargo.toml", "**/*.rs"]
+detect = ["Cargo.toml"]
 source_globs = ["**/*.rs"]
-test_globs = ["**/tests/**/*.rs"]
-docs = []
-hallucination_patterns = ["cannot find function", "no method named", "unresolved import"]
 
 [[checks]]
 id = "test"
 name = "cargo test"
-kind = "test"             # syntax, build, test, lint or static
-order = 40
-when_files = ["Cargo.toml"]
+kind = "test"              # syntax, build, test, lint or static
 run = "cargo test --offline"
-requires = ["cargo"]      # a missing tool shows as skipped
-timeout_s = 1800
+requires = ["cargo"]
 ```
 
-1. Add the toolchain to `sandbox/Dockerfile` and run `make sandbox-vm` to rebuild the image.
-2. Add `"rust"` to `languages` in `workspace/projects/<project>.toml`.
-3. Try it: `node server/dist/cli.js check ~/code/my-repo --sandbox lima`.
-
-Checks run with no network. A check that exits 77 shows as skipped. More in [docs/PACKS.md](docs/PACKS.md).
+Add the toolchain to `sandbox/Dockerfile`, run `make sandbox-vm`, and add `"rust"` to `languages` in `workspace/projects/<project>.toml`. Checks run with no network.
 
 ## Swap models
 
-**Between downloaded models:** choose one on the **Platforms** page. It switches after the current job.
+Pick any downloaded model on the **Platforms** page. To add a new one, create `workspace/packs/models/my-model-q4km.toml`:
 
-**Add a new model:**
+```toml
+id = "my-model-q4km"
+name = "My Model"
+family = "my-family"
+kind = "dense"             # or "moe"
+params_b = 8
+active_params_b = 8
+quant = "Q4_K_M"
+size_gb = 5
+roles = ["main"]
+license = "apache-2.0"
+min_usable_gb = 8
+server_args = ["--jinja"]
 
-1. Create `workspace/packs/models/my-model-q4km.toml`:
+[source]
+hf_repo = "owner/repo-GGUF"
+filename = "my-model-Q4_K_M.gguf"
+```
 
-   ```toml
-   id = "my-model-q4km"
-   name = "My Model (Q4_K_M)"
-   family = "my-family"
-   kind = "dense"            # or "moe"
-   params_b = 8
-   active_params_b = 8
-   quant = "Q4_K_M"
-   size_gb = 5
-   roles = ["main"]          # main, light, reviewer, draft, embed
-   license = "apache-2.0"    # copy from the model card
-   min_usable_gb = 8
-   ctx_default = 16384
-   server_args = ["--jinja"]
+Add its id to `allowed` in your platform file, then:
 
-   [source]
-   hf_repo = "owner/repo-GGUF"
-   filename = "my-model-Q4_K_M.gguf"
-   ```
+```bash
+make download-model ID=my-model-q4km
+make llama-swap-config
+make install-service
+```
 
-2. Download it, add its id to `allowed` in your platform file, and restart:
-
-   ```bash
-   make download-model ID=my-model-q4km
-   make llama-swap-config
-   make install-service
-   ```
-
-Check it with `make bench MODEL_FILE=workspace/models/my-model-Q4_K_M.gguf` and an eval. On a Mac, models over about 20 GB need `make mac-gpu-limit`, which uses sudo and resets on reboot.
+On a Mac, models over about 20 GB also need `make mac-gpu-limit`.
 
 ## Copy weights to another machine
 
-GGUF files work on both macOS and Linux, so download once and copy. Run this on the machine that has the file, after `make install` on the other one:
+GGUF files work on macOS and Linux. After `make install` on the other machine:
 
 ```bash
-rsync -avP workspace/models/Qwen3-8B-Q4_K_M.gguf other-machine:OpenHelper/workspace/models/
-```
+# On the machine with the files. The last two lines copy a project's search index.
+rsync -avP workspace/models/Qwen3-8B-Q4_K_M.gguf other:OpenHelper/workspace/models/
+rsync -av workspace/projects/my-repo.toml other:OpenHelper/workspace/projects/
+rsync -av workspace/index/my-repo/ other:OpenHelper/workspace/index/my-repo/
 
-On the other machine, record the hash and compare it with the output of `shasum -a 256` on the first machine:
-
-```bash
+# On the other machine. Check the printed hash matches `shasum -a 256` on the first.
 node server/dist/cli.js models pin qwen3-8b-q4km --file workspace/models/Qwen3-8B-Q4_K_M.gguf
 make llama-swap-config
 make install-service
 ```
 
-**Search indexes** can be copied too, if both machines use the same embedding model:
-
-```bash
-rsync -av workspace/projects/my-repo.toml other-machine:OpenHelper/workspace/projects/
-rsync -av workspace/index/my-repo/ other-machine:OpenHelper/workspace/index/my-repo/
-```
-
-If the repo is at a different path there, update `repos` in the copied project file.
-
-**Fine-tuned weights:** v0.0.1 has no training command. A LoRA adapter exported as GGUF can be copied the same way, but must be used with the exact base model it was trained on.
-
-Never copy `workspace/secrets/`. Each machine has its own token.
+An index needs the same embedding model on both machines. If the repo path differs, update `repos` in the project file. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
 
 ## Update
 
 ```bash
-git pull
-make build
-make install-service
+git pull && make build && make install-service
 ```
 
 ## More
 
-- [docs/SETUP.md](docs/SETUP.md): memory tiers, a second machine, phone access
-- [docs/PACKS.md](docs/PACKS.md): model, language, doc and workflow packs
-- [docs/SANDBOX.md](docs/SANDBOX.md): sandbox setup
-- [docs/HARNESS.md](docs/HARNESS.md): use it from Continue or Cline
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works
-- [docs/VERIFY-ON-HARDWARE.md](docs/VERIFY-ON-HARDWARE.md): what has been verified
-- [SECURITY.md](SECURITY.md): security model
-
-To work on OpenHelper itself, run `make check-all` before every commit. See [CONTRIBUTING.md](CONTRIBUTING.md).
+[Setup](docs/SETUP.md) · [Packs](docs/PACKS.md) · [Sandbox](docs/SANDBOX.md) · [Editors](docs/HARNESS.md) · [Architecture](docs/ARCHITECTURE.md) · [Verification](docs/VERIFY-ON-HARDWARE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 MIT license. Models and doc packs have their own licenses.

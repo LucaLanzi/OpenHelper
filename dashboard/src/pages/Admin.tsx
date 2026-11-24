@@ -160,7 +160,7 @@ export function Library() {
                     <button onClick={() => void fetchPack(d.id)}>{d.status.fetched ? "Fetch again" : "Fetch"}</button>
                   ) : (
                     <span className="small">
-                      Download from <a href={d.homepage}>{d.homepage.replace(/^https?:\/\//, "")}</a>, then <code>openhelper docs add-local {d.id} PATH</code>
+                      Download from <a href={d.homepage}>{d.homepage.replace(/^https?:\/\//, "")}</a>, then <code>make docs-add ID={d.id} FILE=path</code>
                     </span>
                   )}
                 </td>
