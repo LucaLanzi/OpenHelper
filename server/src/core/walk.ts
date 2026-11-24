@@ -21,6 +21,9 @@ export const DEFAULT_IGNORES = [
   "cmake-build-debug",
   "cmake-build-release",
   "build-fprime-automatic-native",
+  // Generated coverage reports: copies of the source wrapped in HTML.
+  "coverage",
+  "htmlcov",
 ];
 
 export interface WalkOptions {

@@ -325,8 +325,9 @@ export class Runtime {
       const [eta_min_s, eta_max_s] = liveEta(p, estimate, base);
       this.queue.updateProgress(job.id, { ...p, eta_min_s, eta_max_s });
     }});
-    // A fallback keyword build is not a successful sample for the requested embedding model.
-    if (!embed || meta.embed_model === embed) recordTiming({ platform: this.platform.name, embed_model: embed, files: job.progress?.files_processed ?? 0, chunks: meta.chunks, duration_ms: Date.now()-started, at: new Date().toISOString() });
+    // A fallback keyword build is not a successful sample for the requested embedding model,
+    // and a mostly cached rebuild says little about how fast this machine embeds.
+    if (!embed || (meta.embed_model === embed && (meta.embedded ?? 0) >= meta.chunks / 2)) recordTiming({ platform: this.platform.name, embed_model: embed, files: job.progress?.files_processed ?? 0, chunks: meta.chunks, duration_ms: Date.now()-started, at: new Date().toISOString() });
     return { ...meta, duration_ms: Date.now()-started, files: job.progress?.files_processed ?? 0 };
   }
 

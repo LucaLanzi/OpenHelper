@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, chmodSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -21,8 +22,11 @@ import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack, infoToText
 import { implement, review } from "../src/agent/agents.js";
 import { filesFromPlan, retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { projectModel } from "../src/runtime.js";
-import { buildIndex } from "../src/index/build.js";
+import { boilerplate, buildIndex } from "../src/index/build.js";
 import { liveEta } from "../src/index/estimate.js";
+import { walkFiles } from "../src/core/walk.js";
+import { EmbedCache, embedCacheFile } from "../src/index/embed-cache.js";
+import { SearchIndex } from "../src/index/search.js";
 import { JobQueue } from "../src/jobs/queue.js";
 import { runChecks } from "../src/checks/runner.js";
 import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
@@ -536,6 +540,70 @@ describe("index ETA", () => {
     expect(hi).toBeGreaterThanOrEqual(500);
     expect(hi).toBeLessThan(700);
     expect(liveEta({ ...p, phase: "complete" }, est, base)).toEqual([0, 0]);
+  });
+});
+
+describe("embedding cache", () => {
+  const vec = (s: string) => [...createHash("sha1").update(s).digest().subarray(0, 3)].map((b) => b - 127.5);
+  const fakeLlm = (failFrom = Infinity) => {
+    const calls: number[] = [];
+    const llm = { embed: async (_m: string, inputs: string[]) => {
+      calls.push(inputs.length);
+      if (calls.length >= failFrom) throw new Error("embeddings returned 500");
+      return inputs.map(vec);
+    } } as unknown as LlmClient;
+    return { llm, calls };
+  };
+  const project = () => {
+    const repo = join(tempWorkspace(), "repo");
+    for (let i = 0; i < 100; i++) write(repo, `m${i}.py`, `def f${i}():\n    return ${i}\n`);
+    return ProjectSchema.parse({ name: "big", repos: [repo], docs: [] });
+  };
+  const inCache = () => new EmbedCache(embedCacheFile("e")).size;
+
+  it("keeps finished batches when a build fails, then embeds only what is missing", async () => {
+    const p = project();
+    const failing = fakeLlm(3);
+    expect(await buildIndex(p, { llm: failing.llm, embedModel: "e" })).toMatchObject({ dims: 0 });
+    expect(inCache()).toBe(64);
+
+    const ok = fakeLlm();
+    expect(await buildIndex(p, { llm: ok.llm, embedModel: "e" })).toMatchObject({ dims: 3, chunks: 100 });
+    expect(ok.calls.reduce((a, n) => a + n, 0)).toBe(36);
+
+    const again = fakeLlm();
+    await buildIndex(p, { llm: again.llm, embedModel: "e" });
+    expect(again.calls).toEqual([]);
+    const idx = SearchIndex.load(join(process.env.OPENHELPER_WORKSPACE!, "index", "big"))!;
+    const c = idx.chunks[7]!;
+    expect(idx.search("anything", 1, vec(`${c.title}\n${c.text}`))[0]?.id).toBe(c.id);
+  });
+
+  it("finds menu lines repeated on most doc pages, and skips generated coverage reports", () => {
+    const pages = Array.from({ length: 30 }, (_, i) => `# Page ${i}\nIterators library\nreal text ${i}\n${i < 10 ? "Shared by a third" : ""}`);
+    expect([...boilerplate(pages)]).toEqual(["Iterators library"]);
+    expect(boilerplate(pages.slice(0, 19)).size).toBe(0);
+    const repo = join(tempWorkspace(), "repo");
+    write(repo, "src/a.cpp", "int a;");
+    write(repo, "coverage/coverage.a.cpp.html", "<html>int a;</html>");
+    write(repo, "htmlcov/index.html", "<html></html>");
+    expect(walkFiles(repo)).toEqual(["src/a.cpp"]);
+  });
+
+  it("drops a half-written record and still loads indexes saved as base64", async () => {
+    const p = project();
+    await buildIndex(p, { llm: fakeLlm().llm, embedModel: "e" });
+    const file = embedCacheFile("e");
+    appendFileSync(file, Buffer.alloc(9));
+    expect(inCache()).toBe(100);
+    expect(statSync(file).size).toBe(4 + 100 * (20 + 3 * 4));
+
+    const dir = join(process.env.OPENHELPER_WORKSPACE!, "index", "big");
+    const raw = readFileSync(join(dir, "vectors.f32"));
+    writeFileSync(join(dir, "vectors.f32"), raw.toString("base64"));
+    const idx = SearchIndex.load(dir)!;
+    const c = idx.chunks[3]!;
+    expect(idx.search("anything", 1, vec(`${c.title}\n${c.text}`))[0]?.id).toBe(c.id);
   });
 });
 

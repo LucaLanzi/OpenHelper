@@ -98,6 +98,8 @@ export interface IndexMeta {
   embed_model: string;
   dims: number;
   redactions: number;
+  /** Embeddings computed by this build; the rest came from the cache. */
+  embedded?: number;
 }
 
 /** On disk: chunks.jsonl, bm25.json, optional vectors.f32 + meta.json. */
@@ -111,25 +113,40 @@ export class SearchIndex {
 
   static save(dir: string, meta: IndexMeta, chunks: Chunk[], vectors?: Float32Array): void {
     ensureDir(dir);
-    writeFileAtomic(join(dir, "chunks.jsonl"), chunks.map((c) => JSON.stringify(c)).join("\n"));
-    writeFileAtomic(join(dir, "bm25.json"), JSON.stringify(Bm25.build(chunks.map((c) => `${c.title}\n${c.path}\n${c.text}`)).data));
-    if (vectors) writeFileAtomic(join(dir, "vectors.f32"), Buffer.from(vectors.buffer).toString("base64"));
+    // Streamed: a big project's files pass V8's 512 MB string limit.
+    writeFileAtomic(join(dir, "chunks.jsonl"), (function* () { for (const c of chunks) yield JSON.stringify(c) + "\n"; })());
+    const { postings, ...rest } = Bm25.build(chunks.map((c) => `${c.title}\n${c.path}\n${c.text}`)).data;
+    writeFileAtomic(join(dir, "bm25.json"), (function* () {
+      yield JSON.stringify(rest).slice(0, -1) + ',"postings":{';
+      let first = true;
+      for (const term in postings) { yield `${first ? "" : ","}${JSON.stringify(term)}:${JSON.stringify(postings[term])}`; first = false; }
+      yield "}}";
+    })());
+    if (vectors) writeFileAtomic(join(dir, "vectors.f32"), new Uint8Array(vectors.buffer, vectors.byteOffset, vectors.byteLength));
     writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   }
 
   static load(dir: string): SearchIndex | undefined {
     if (!existsSync(join(dir, "meta.json"))) return undefined;
     const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as IndexMeta;
-    const chunks = readFileSync(join(dir, "chunks.jsonl"), "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => JSON.parse(l) as Chunk);
+    const raw = readFileSync(join(dir, "chunks.jsonl"));
+    const chunks: Chunk[] = [];
+    for (let at = 0; at < raw.length; ) {
+      const nl = raw.indexOf(10, at);
+      const end = nl < 0 ? raw.length : nl;
+      if (end > at) chunks.push(JSON.parse(raw.toString("utf8", at, end)) as Chunk);
+      at = end + 1;
+    }
+    // ponytail: bm25.json is parsed as one string, so it must stay under 512 MB; stream-parse it if a workspace gets there.
     const bm25 = new Bm25(JSON.parse(readFileSync(join(dir, "bm25.json"), "utf8")) as Bm25Data);
     let vectors: Float32Array | undefined;
     const vf = join(dir, "vectors.f32");
     if (meta.dims && existsSync(vf)) {
-      const buf = Buffer.from(readFileSync(vf, "utf8"), "base64");
-      vectors = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+      let buf = readFileSync(vf);
+      // Indexes built before 0.0.2 stored base64 text; its length never equals the raw size.
+      if (buf.byteLength !== meta.chunks * meta.dims * 4) buf = Buffer.from(buf.toString("utf8"), "base64");
+      const ab = buf.byteOffset % 4 ? buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) : buf.buffer;
+      vectors = new Float32Array(ab, buf.byteOffset % 4 ? 0 : buf.byteOffset, buf.byteLength / 4);
     }
     return new SearchIndex(meta, chunks, bm25, vectors);
   }

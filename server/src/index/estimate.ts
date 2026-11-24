@@ -52,7 +52,7 @@ export function estimateIndex(p: Platform, work: Workload, embed: string, histor
   }
   const spread = confidence === "medium" ? 0.5 : 0.8;
   return { platform: p.display_name || p.name, min_s: Math.max(1, Math.floor(seconds * (1-spread))), max_s: Math.max(5, Math.ceil(seconds * (1+spread) + 5)), basis, confidence, workload: work,
-    explanation: `${work.files} files including ${work.doc_files} documentation files; about ${work.chunks} chunks. ${embed ? `Embeddings: ${embed}.` : "Keyword search only."} CPU, memory, storage, model speed and competing work affect duration. Downloads and queue wait are excluded.${work.missing_docs.length ? ` Missing documentation: ${work.missing_docs.join(", ")}; add it in Library and rebuild.` : ""}` };
+    explanation: `${work.files} files including ${work.doc_files} documentation files; about ${work.chunks} chunks. ${embed ? `Embeddings: ${embed}. Chunks embedded by an earlier build, for any project, are reused, so a rebuild is usually much faster than this.` : "Keyword search only."} CPU, memory, storage, model speed and competing work affect duration. Downloads and queue wait are excluded.${work.missing_docs.length ? ` Missing documentation: ${work.missing_docs.join(", ")}; add it in Library and rebuild.` : ""}` };
 }
 
 /**

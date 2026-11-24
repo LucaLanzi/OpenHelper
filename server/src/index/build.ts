@@ -9,8 +9,22 @@ import { isSecretFile, scrub } from "../core/scrub.js";
 import { walkFiles } from "../core/walk.js";
 import type { LlmClient } from "../llm/client.js";
 import { chunkFile, type Chunk } from "./chunk.js";
+import { EmbedCache, embedCacheFile } from "./embed-cache.js";
 import { docFiles, docTextDir } from "./docs.js";
 import { SearchIndex, type IndexMeta } from "./search.js";
+
+const EMBED_BATCH = 32;
+
+/** What the embedding model sees for a chunk; also the cache key, so changing it re-embeds everything. */
+const embedInput = (c: Chunk) => `${c.title}\n${c.text.replace(/\n{3,}/g, "\n\n")}`.slice(0, 4000);
+
+/** Lines on more than half of a doc pack's pages (menus, footers): noise for search, and costly to embed. */
+export function boilerplate(texts: string[]): Set<string> {
+  if (texts.length < 20) return new Set();
+  const seen = new Map<string, number>();
+  for (const t of texts) for (const l of new Set(t.split("\n"))) if (l.trim()) seen.set(l, (seen.get(l) ?? 0) + 1);
+  return new Set([...seen].filter(([, k]) => k > texts.length / 2).map(([l]) => l));
+}
 
 export function expandHome(p: string): string {
   return p.startsWith("~/") ? join(process.env.HOME ?? "", p.slice(2)) : resolve(p);
@@ -81,8 +95,12 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     const files = docFiles(dir).filter(f => !isSecretFile(f));
     progress.files_discovered += files.length;
     progress.phase = "reading documentation";
-    for (const rel of files) {
-      for (const c of chunkFile(src, rel, scrub(readFileSync(join(dir, rel), "utf8")).text)) {
+    const texts = files.map((rel) => scrub(readFileSync(join(dir, rel), "utf8")).text);
+    const boiler = boilerplate(texts);
+    for (const [i, rel] of files.entries()) {
+      // Blank, not delete, so cited line numbers still match the doc file.
+      const text = boiler.size ? texts[i]!.split("\n").map((l) => (boiler.has(l) ? "" : l)).join("\n") : texts[i]!;
+      for (const c of chunkFile(src, rel, text)) {
         chunks.push(c);
         n++;
       }
@@ -96,21 +114,29 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
 
   let vectors: Float32Array | undefined;
   let dims = 0;
+  let embedded = 0;
   if (opts.llm && opts.embedModel) {
     progress.phase = "embedding"; report();
     log(`embedding ${chunks.length} chunks with ${opts.embedModel}`);
-    const batch = 32;
-    const all: number[][] = [];
+    const cache = new EmbedCache(embedCacheFile(opts.embedModel));
+    const keys = chunks.map((c) => EmbedCache.key(embedInput(c)));
+    const inputs = new Map<string, string>();
+    keys.forEach((k, i) => { if (!cache.get(k)) inputs.set(k, embedInput(chunks[i]!)); });
+    const missing = [...inputs.keys()];
+    const done = () => { progress.embeddings_completed = chunks.length - missing.length + embedded; report(); };
+    log(`${missing.length} chunks need embeddings; the other ${chunks.length - missing.length} are cached or duplicates`);
+    done();
     try {
-      for (let i = 0; i < chunks.length; i += batch) {
-        const part = chunks.slice(i, i + batch).map((c) => `${c.title}\n${c.text}`.slice(0, 4000));
+      // One request at a time: a batch already fills every llama-server slot, and more in flight measured no faster.
+      for (let i = 0; i < missing.length; i += EMBED_BATCH) {
+        const part = missing.slice(i, i + EMBED_BATCH);
         opts.signal?.throwIfAborted();
-        all.push(...(await opts.llm.embed(opts.embedModel, part)));
-        progress.embeddings_completed = all.length; report();
+        cache.add(part, await opts.llm.embed(opts.embedModel, part.map((k) => inputs.get(k)!)));
+        embedded += part.length; done();
       }
-      dims = all[0]?.length ?? 0;
-      vectors = new Float32Array(all.length * dims);
-      all.forEach((v, i) => vectors!.set(v, i * dims));
+      dims = cache.dims;
+      vectors = new Float32Array(chunks.length * dims);
+      keys.forEach((k, i) => vectors!.set(cache.get(k)!, i * dims));
     } catch (e) {
       opts.signal?.throwIfAborted();
       // Keyword search still works, so a model server problem shouldn't leave the repo unsearchable.
@@ -126,6 +152,7 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     embed_model: dims ? (opts.embedModel ?? "") : "",
     dims,
     redactions,
+    ...(dims ? { embedded } : {}),
   };
   progress.phase = "saving"; report();
   SearchIndex.save(ws.index(project.name), meta, chunks, vectors);

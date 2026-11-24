@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
@@ -8,11 +8,18 @@ export function ensureDir(dir: string): string {
   return dir;
 }
 
-/** Write atomically: temp file, then rename, so a crash never leaves half a config. */
-export function writeFileAtomic(path: string, data: string): void {
+/**
+ * Write atomically: temp file, then rename, so a crash never leaves half a config.
+ * Pass an iterable of strings for large files: V8 strings stop at 512 MB.
+ */
+export function writeFileAtomic(path: string, data: string | Uint8Array | Iterable<string>): void {
   ensureDir(dirname(path));
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
-  writeFileSync(tmp, data);
+  if (typeof data === "string" || data instanceof Uint8Array) writeFileSync(tmp, data);
+  else {
+    const fd = openSync(tmp, "w");
+    try { for (const s of data) writeSync(fd, s); } finally { closeSync(fd); }
+  }
   renameSync(tmp, path);
 }
 
