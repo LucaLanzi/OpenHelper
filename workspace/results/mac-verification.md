@@ -15,6 +15,7 @@ Models: Qwen3-8B Q4_K_M and Qwen3-Embedding-0.6B Q8_0, both Apache-2.0, from Qwe
 | Services | `127.0.0.1` only; `/api/health` OK; audit chain intact (`first_broken: -1`) |
 | Log out and back in | Both services restarted with new process IDs, health OK, 3 runs still waiting for approval, sandbox runs, audit chain intact |
 | Lima sandbox | All 6 checks of this repo pass, under the `openhelper-sandbox` AppArmor profile |
+| `make sandbox-vm` | Existing system-containerd VM and a brand-new default VM (99 s): network off, all checks green on calc-demo and this repo through the engine |
 | Sandbox confinement | Mount denied, `/proc/sysrq-trigger` read-only, no network |
 | Index | calc-demo 6,727 chunks; openhelper-test 10,171 chunks; hybrid, 1024-dim |
 | Doc packs | 7 fetched; gnu-bash and gnu-make came from mirror tarballs because gnu.org timed out |
@@ -66,7 +67,6 @@ openhelper-test by task:
 ## Failed or not done
 
 - **Reboot:** not tested. The services are launchd agents. The Lima VM survived the logout, but nothing is set up to start it after a reboot, so it may need `limactl start openhelper`.
-- **`make sandbox-vm`:** not run on this Mac. The VM here was set up by hand with system containerd. The script's `nerdctl info` check has the same flaw fixed in the engine by a274fd7: on this VM it would choose plain `nerdctl`, so it was not run against it.
 - **Phone layout:** the Jobs page overflows horizontally at 390 px. The other three phone pages fit.
 - **Not run:** Ubuntu desktop, 27B and 35B models, two real machines, copying between two real machines, fine-tuning (no training command exists).
 - **Restarts:** a restart still fails a job that is in progress. An eval on 9c9d3a9 was lost this way:
@@ -94,6 +94,7 @@ status failed error server restarted while the job was in progress
 | Sandbox picked the wrong `nerdctl`, skipping all checks | Detect by the image |
 | Reviewer approved an empty patch | Empty or failed changes cannot be approved |
 | 8B copied the `path/to/file.py` example | Show the plan's real path |
+| `make sandbox-vm` picked the wrong `nerdctl`; `YES=1` was ignored | Detect by the image; honour `YES=1` |
 
 ## Left on this Mac
 
@@ -102,4 +103,5 @@ Nothing was deleted, as the owner asked. These can be removed when no longer wan
 - `workspace/.lima-write-test`, an empty file from a write test
 - `workspace/worktrees/mwtvn2e4-1` and its branch in the test clone, from the interrupted eval
 - `workspace/test-repos/`, the OpenHelper clone and calc-demo
-- The `openhelper` Lima VM, about 7.4 GB
+- The `openhelper` Lima VM, about 7.4 GB, which OpenHelper uses
+- The `openhelper-test` Lima VM, 6.6 GB, stopped, used only to test `make sandbox-vm`
