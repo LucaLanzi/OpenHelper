@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { get, post, setToken, type JobSummary, type LinksInfo } from "../api";
+import { get, post, setToken, type JobSummary, type LinksInfo, type DocPackInfo, type LanguageInfo } from "../api";
+import { Documentation } from "../components/Documentation";
 import { PathField } from "../components/PathField";
 import { Diff, Empty, ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
 import { go, href } from "../router";
@@ -108,21 +109,9 @@ export function Links() {
 
 // ------------------------------------------------------------------------ Library
 
-interface DocPackInfo {
-  id: string;
-  name: string;
-  version: string;
-  license: string;
-  sources: unknown[];
-  local_command: string;
-  homepage: string;
-  notes: string;
-  status: { fetched: boolean; files: number };
-}
-
 function Languages() {
   const toast = useToast();
-  const languages = useLoad(() => get<{ id: string; name: string; detect: string[]; checks: string[] }[]>("/languages"));
+  const languages = useLoad(() => get<LanguageInfo[]>("/languages"));
   const [name, setName] = useState("");
   const [extensions, setExtensions] = useState("");
   const [test, setTest] = useState("");
@@ -143,7 +132,9 @@ function Languages() {
   return (
     <section className="section stack-s" aria-label="Languages">
       <h2>Languages</h2>
-      <p className="muted">{languages.data?.map((l) => l.name).join(", ")}</p>
+      <p className="muted">A language pack detects source files and defines code checks. Documentation packs provide reference text for search.</p>
+      <ErrorNote error={languages.error}/>
+      <div className="doc-grid">{languages.data?.map(l=><details className="panel" key={l.id}><summary>{l.name} · {l.details.length} checks</summary><p>Detects: {l.detect.join(", ")}</p><p>Checks run {l.sandbox === "none" ? "directly on this machine when manually requested; auto-run is disabled" : `inside ${l.sandbox} with network disabled`}. A project's execution platform chooses its sandbox.</p><ul>{l.details.map(c=><li key={c.id}><strong>{c.name}</strong> ({c.kind}) · requires {c.requires.join(", ") || "no additional tools"}{c.when_files.length ? `; applies when ${c.when_files.join(", ")} exists` : ""}</li>)}</ul><p>Missing tools cause checks to be skipped and prevent a fully Checked result. Exit code 77 means a check does not apply.</p><p className="small">Example: add a repository containing {l.detect[0]}, enable {l.name} during setup, then choose Run checks in its project panel.</p></details>)}</div>
       <div className="panel stack-s">
         <h3>Add a language</h3>
         <div className="row">
@@ -160,7 +151,7 @@ function Languages() {
             <input value={test} placeholder="cargo test --offline" onChange={(e) => setTest(e.target.value)} />
           </label>
         </div>
-        <p className="small muted">Tests run in the sandbox with no network. If its tool isn't in the sandbox yet, the check shows as skipped.</p>
+        <p className="small muted">Checks use the execution platform’s sandbox. With no sandbox, manually requested checks run directly on the host. Missing tools are skipped.</p>
         <ErrorNote error={error} />
         <div>
           <button className="primary" disabled={!name.trim() || !extensions.trim()} onClick={() => void add()}>
@@ -215,38 +206,8 @@ export function Library() {
     <>
       <PageHead title="Library" intro="Version-pinned docs the model cites. Each is downloaded to this machine once, then used offline. Rebuild a project's index after fetching." />
       <ErrorNote error={docs.error} />
-      <div className="panel table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Docs</th>
-              <th>Version</th>
-              <th>On this machine</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {docs.data?.map((d) => (
-              <tr key={d.id}>
-                <td>
-                  <strong>{d.name}</strong>
-                  <div className="small muted">{d.license}</div>
-                  {d.notes && <div className="small">{d.notes}</div>}
-                </td>
-                <td>{d.version}</td>
-                <td>{d.status.fetched ? `${d.status.files} files` : "not fetched"}</td>
-                <td>
-                  {d.sources.length || d.local_command ? (
-                    <button onClick={() => void fetchPack(d.id)}>{d.status.fetched ? "Fetch again" : "Fetch"}</button>
-                  ) : (
-                    <AddLocalDocs id={d.id} homepage={d.homepage} />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <p className="notice">Documentation packs are versioned reference material shared by projects on this instance. Language packs detect code and run checks. Download a pack or add a local file/folder below, select it during project setup, then explicitly build the project's index. Adding or refreshing documentation requires an index rebuild; remote instances keep their own copies.</p>
+      <Documentation packs={docs.data ?? []} actions={d=><div className="stack-s">{Boolean(d.sources.length || d.local_command) && <button onClick={()=>void fetchPack(d.id)}>{d.status.fetched ? "Download again" : "Download / collect documentation"}</button>}<details><summary>Add a local copy</summary><AddLocalDocs id={d.id} homepage={d.homepage}/></details></div>}/>
       <Languages />
     </>
   );
