@@ -1,0 +1,13 @@
+name: plan-only
+description: Draft a plan you can read, edit and approve before any code is written.
+inputs: [task]
+steps:
+  - id: plan
+    platform: "@plan"
+    agent: planner
+    prompt: "/plan {task}"
+    gate: human-approve
+limits:
+  max_hops: 1
+  max_wall: 30m
+  max_tokens: 60000

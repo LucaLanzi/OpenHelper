@@ -1,0 +1,56 @@
+id = "javascript"
+name = "JavaScript and TypeScript (Node.js)"
+detect = ["package.json", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+source_globs = ["**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}"]
+test_globs = ["**/*.test.{js,ts,tsx,mjs}", "**/*.spec.{js,ts,tsx,mjs}", "**/__tests__/**", "**/test/**/*.{js,ts,mjs}"]
+docs = ["nodejs", "react", "vite"]
+hallucination_patterns = [
+  "Cannot find module",
+  "is not a function",
+  "error TS2339",
+  "error TS2305",
+  "error TS2307",
+  "error TS2724",
+  "is not exported by",
+]
+
+[lsp]
+command = "typescript-language-server"
+args = ["--stdio"]
+
+[[checks]]
+id = "node-check"
+name = "node --check on JavaScript files"
+kind = "syntax"
+order = 5
+run = "for f in {files}; do node --check \"$f\" || exit 1; done"
+files = ["**/*.{js,mjs,cjs}"]
+requires = ["node"]
+
+[[checks]]
+id = "tsc"
+name = "tsc --noEmit"
+kind = "static"
+order = 15
+when_files = ["tsconfig.json"]
+run = "sh \"$OH_PACKS/languages/scripts/js-tool.sh\" tsc --noEmit"
+requires = ["node"]
+
+[[checks]]
+id = "eslint"
+name = "ESLint"
+kind = "lint"
+order = 60
+when_files = ["eslint.config.js", "eslint.config.mjs", "eslint.config.cjs", "eslint.config.ts", ".eslintrc.json", ".eslintrc.js", ".eslintrc.cjs"]
+run = "sh \"$OH_PACKS/languages/scripts/js-tool.sh\" eslint ."
+requires = ["node"]
+
+[[checks]]
+id = "npm-test"
+name = "Project tests (npm test)"
+kind = "test"
+order = 40
+when_files = ["package.json"]
+run = "sh \"$OH_PACKS/languages/scripts/js-test.sh\""
+requires = ["node", "npm"]
+timeout_s = 900

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.openhelper.llm</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@SWAP@</string>
+    <string>--config</string><string>@WS@/llama-swap.yaml</string>
+    <string>--listen</string><string>127.0.0.1:@PORT@</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>@PATH@</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>@WS@/logs/llm.log</string>
+  <key>StandardErrorPath</key><string>@WS@/logs/llm.log</string>
+</dict>
+</plist>

@@ -1,0 +1,51 @@
+id = "cpp"
+name = "C and C++"
+detect = ["**/*.cpp", "**/*.cc", "**/*.cxx", "**/*.hpp", "**/*.hh", "**/*.c", "**/*.h"]
+source_globs = ["**/*.{cpp,cc,cxx,c,hpp,hh,hxx,h}"]
+test_globs = ["**/test/**", "**/tests/**", "**/*_test.{cpp,cc}", "**/test_*.{cpp,cc}", "**/*Test.{cpp,hpp}", "**/*Tester.{cpp,hpp}"]
+docs = ["cppreference"]
+hallucination_patterns = [
+  "was not declared in this scope",
+  "has no member named",
+  "is not a member of",
+  "no matching function for call",
+  "fatal error: [^:]+: No such file or directory",
+  "use of undeclared identifier",
+  "no member named",
+]
+
+[lsp]
+command = "clangd"
+args = ["--compile-commands-dir=build"]
+
+[[checks]]
+id = "syntax"
+name = "Compile check with -Wall -Wextra -Wpedantic (projects without CMake)"
+kind = "build"
+order = 10
+unless_files = ["CMakeLists.txt", "Makefile"]
+run = "for f in {files}; do case \"$f\" in *.c) cc -std=c11 -Wall -Wextra -Wpedantic -Werror -fsyntax-only \"$f\" || exit 1;; *) c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -fsyntax-only \"$f\" || exit 1;; esac; done"
+files = ["**/*.{cpp,cc,cxx,c}"]
+requires = ["c++"]
+
+[[checks]]
+id = "clang-tidy"
+name = "clang-tidy"
+kind = "static"
+order = 55
+when_files = ["build/compile_commands.json"]
+run = "clang-tidy -p build --quiet {files}"
+files = ["**/*.{cpp,cc,cxx}"]
+requires = ["clang-tidy"]
+required = false
+timeout_s = 1800
+
+[[checks]]
+id = "cppcheck"
+name = "cppcheck"
+kind = "static"
+order = 56
+run = "cppcheck --error-exitcode=1 --enable=warning,performance,portability --inline-suppr --quiet -i build -i build-asan ."
+requires = ["cppcheck"]
+required = false
+timeout_s = 1800

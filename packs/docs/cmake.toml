@@ -1,0 +1,9 @@
+id = "cmake"
+name = "CMake reference (from the installed cmake)"
+version = "installed"
+license = "BSD-3-Clause"
+redistributable = false
+homepage = "https://cmake.org/cmake/help/latest/"
+local_command = "cmake --help-full"
+verified = false
+notes = "Uses the docs of the cmake you actually run, so versions always match."

@@ -1,0 +1,22 @@
+# Light model: small enough to sit entirely in 11 GB of VRAM, so it generates several times faster.
+id = "qwen3-8b-q4km"
+name = "Qwen3 8B (Q4_K_M)"
+family = "qwen3"
+kind = "dense"
+params_b = 8
+active_params_b = 8
+quant = "Q4_K_M"
+size_gb = 5
+roles = ["light", "main"]
+license = "apache-2.0 (confirm on the model card)"
+min_usable_gb = 8
+ctx_default = 16384
+tokenizer = "qwen3"
+server_args = ["--jinja", "--flash-attn", "on"]
+verified = false
+sha256 = ""
+notes = "Also the main model on XS/S tiers."
+
+[source]
+hf_repo = ""
+filename = ""

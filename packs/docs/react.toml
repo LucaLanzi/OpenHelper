@@ -1,0 +1,12 @@
+id = "react"
+name = "React documentation (react.dev sources)"
+version = "main"
+license = "CC-BY-4.0 (content); fetched by each user"
+redistributable = false
+homepage = "https://react.dev"
+verified = false
+
+[[sources]]
+url = "https://github.com/reactjs/react.dev/archive/refs/heads/main.tar.gz"
+format = "tar"
+subdir = "src/content"

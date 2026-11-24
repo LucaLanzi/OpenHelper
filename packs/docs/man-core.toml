@@ -1,0 +1,7 @@
+id = "man-core"
+name = "Man pages for common command-line tools (from this machine)"
+version = "installed"
+license = "varies by page; never redistributed"
+redistributable = false
+local_command = "for c in ls cp mv rm mkdir find grep sed awk xargs tar gzip ssh rsync curl git make gcc g++ ld ar nm objdump gdb bash sh test printf; do printf '\\n==== man %s ====\\n' \"$c\"; MANWIDTH=100 man -P cat \"$c\" 2>/dev/null; done"
+verified = false

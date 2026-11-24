@@ -1,0 +1,22 @@
+# Dense alternative for unified-memory machines (the M1 Pro baseline). Phase 0 compares it with the MoE.
+id = "qwen3.6-27b-q4km"
+name = "Qwen3.6 27B (Q4_K_M)"
+family = "qwen3.6"
+kind = "dense"
+params_b = 27
+active_params_b = 27
+quant = "Q4_K_M"
+size_gb = 17
+roles = ["main"]
+license = "check the model card before pinning"
+min_usable_gb = 21
+ctx_default = 16384
+tokenizer = "qwen3.6"
+server_args = ["--jinja", "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]
+verified = false
+sha256 = ""
+notes = "Mac prompt processing is slow (35-90 tok/s reported), so keep retrieved context short."
+
+[source]
+hf_repo = ""
+filename = ""

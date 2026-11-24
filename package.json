@@ -1,0 +1,23 @@
+{
+  "name": "openhelper",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A self-hosted, offline coding assistant: your repos, your model, your hardware.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "dashboard"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "npm run build -w server && npm run build -w dashboard",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w dashboard",
+    "test": "npm test -w server",
+    "dev:server": "npm run dev -w server",
+    "dev:dashboard": "npm run dev -w dashboard",
+    "mock-llm": "npm run mock-llm -w server"
+  }
+}

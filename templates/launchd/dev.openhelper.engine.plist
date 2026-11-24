@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.openhelper.engine</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@NODE@</string>
+    <string>@ROOT@/server/dist/cli.js</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENHELPER_ROOT</key><string>@ROOT@</string>
+    <key>OPENHELPER_WORKSPACE</key><string>@WS@</string>
+    <key>PATH</key><string>@PATH@</string>
+  </dict>
+  <key>WorkingDirectory</key><string>@ROOT@</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>@WS@/logs/engine.log</string>
+  <key>StandardErrorPath</key><string>@WS@/logs/engine.log</string>
+</dict>
+</plist>

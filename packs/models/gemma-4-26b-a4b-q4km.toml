@@ -1,0 +1,23 @@
+# Reviewer from a different model family, so it does not share the main model's blind spots.
+# Runs as a separate stage with a model swap on the 11 GB card.
+id = "gemma-4-26b-a4b-q4km"
+name = "Gemma 4 26B-A4B (Q4_K_M)"
+family = "gemma4"
+kind = "moe"
+params_b = 26
+active_params_b = 4
+quant = "Q4_K_M"
+size_gb = 16
+roles = ["reviewer"]
+license = "check the model card before pinning"
+min_usable_gb = 19
+ctx_default = 16384
+tokenizer = "gemma4"
+server_args = ["--jinja", "--flash-attn", "on"]
+verified = false
+sha256 = ""
+notes = "Unverified for review quality; kept only if it lowers errors on your eval tasks."
+
+[source]
+hf_repo = ""
+filename = ""

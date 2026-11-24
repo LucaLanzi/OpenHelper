@@ -1,0 +1,13 @@
+id = "python-stdlib"
+name = "Python documentation (library and language reference)"
+version = "3.12.8"
+license = "PSF-2.0 (docs); fetched by each user"
+redistributable = false
+homepage = "https://docs.python.org/3.12/"
+verified = false
+notes = "Indexes the reStructuredText sources from the CPython tag. Match the version to the Python you run."
+
+[[sources]]
+url = "https://github.com/python/cpython/archive/refs/tags/v3.12.8.tar.gz"
+format = "tar"
+subdir = "Doc"

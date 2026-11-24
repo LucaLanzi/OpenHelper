@@ -1,0 +1,14 @@
+# Pinned versions of everything setup builds or downloads.
+# `make pin` records the exact commits after the first successful hardware run;
+# until then the refs below are what setup uses. Change them deliberately, never casually.
+
+# llama.cpp: tag (bNNNN) or commit. "pending" builds the newest release tag and records it.
+LLAMA_CPP_REPO=https://github.com/ggml-org/llama.cpp
+LLAMA_CPP_REF=pending
+
+# llama-swap: release version without the leading v. "pending" uses the newest release and records it.
+LLAMA_SWAP_REPO=https://github.com/mostlygeek/llama-swap
+LLAMA_SWAP_VERSION=pending
+
+# Node.js major version the engine is tested with.
+NODE_MAJOR=22

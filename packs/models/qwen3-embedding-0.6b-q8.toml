@@ -1,0 +1,22 @@
+# Embedding model for hybrid search (keywords + embeddings). Small; runs alongside the main model.
+id = "qwen3-embedding-0.6b-q8"
+name = "Qwen3 Embedding 0.6B (Q8_0)"
+family = "qwen3-embedding"
+kind = "dense"
+params_b = 0.6
+active_params_b = 0.6
+quant = "Q8_0"
+size_gb = 0.7
+roles = ["embed"]
+license = "apache-2.0 (confirm on the model card)"
+min_usable_gb = 2
+ctx_default = 8192
+tokenizer = "qwen3"
+server_args = ["--embedding", "--pooling", "last"]
+verified = false
+sha256 = ""
+notes = "Search works without it (keyword-only) until it is pinned."
+
+[source]
+hf_repo = ""
+filename = ""

@@ -1,0 +1,12 @@
+id = "vite"
+name = "Vite documentation"
+version = "main"
+license = "MIT"
+redistributable = true
+homepage = "https://vite.dev"
+verified = false
+
+[[sources]]
+url = "https://github.com/vitejs/vite/archive/refs/heads/main.tar.gz"
+format = "tar"
+subdir = "docs"

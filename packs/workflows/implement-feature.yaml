@@ -1,0 +1,27 @@
+# Plan on one machine, implement on the one with more compute, review back on the first.
+# "@plan" and "@build" are aliases set in workspace/config.toml, so the same workflow
+# works on one machine (both aliases point at it) or two.
+name: implement-feature
+description: Plan, approve, implement with checks, then review against the plan.
+inputs: [task]
+steps:
+  - id: plan
+    platform: "@plan"
+    agent: planner
+    prompt: "/plan {task}"
+    gate: human-approve
+  - id: implement
+    platform: "@build"
+    agent: coder
+    prompt: "/implement {plan}"
+    checks: [syntax, build, test, lint, static]
+    best_of: 2
+  - id: review
+    platform: "@plan"
+    agent: reviewer
+    prompt: "/review {patch} against {plan}"
+    gate: human-approve
+limits:
+  max_hops: 6
+  max_wall: 2h
+  max_tokens: 200000
