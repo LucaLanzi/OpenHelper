@@ -14,6 +14,7 @@
 # shellcheck source=scripts/lib.sh
 . "$(dirname "$0")/lib.sh"
 
+[ -z "${YES:-}" ] || export OH_YES=1
 VM="${VM_NAME:-openhelper}"
 IMAGE="openhelper-sandbox:latest"
 
@@ -77,14 +78,10 @@ macos() {
 
     b "2/4 containerd inside the VM"
     # Lima's default VM runs containerd rootless (plain nerdctl); a VM set up with system
-    # containerd needs sudo. The engine detects the same way.
-    if limactl shell "$VM" -- nerdctl info >/dev/null 2>&1; then
-        nerdctl=(nerdctl)
-    elif limactl shell "$VM" -- sudo nerdctl info >/dev/null 2>&1; then
-        nerdctl=(sudo nerdctl)
-    else
+    # containerd needs sudo.
+    found="$(lima_nerdctl "$VM" "$IMAGE")" ||
         die "nerdctl is not working inside the VM; recreate it with: limactl delete -f $VM && make sandbox-vm"
-    fi
+    read -r -a nerdctl <<< "$found"
     ok "${nerdctl[*]} works"
     if [ "${nerdctl[0]}" = sudo ]; then
         "$OH_ROOT/scripts/lima-apparmor.sh" "$VM"

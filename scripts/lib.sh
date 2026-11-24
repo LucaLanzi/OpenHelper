@@ -55,6 +55,20 @@ newest_release_tag() {
     git -C "$1" for-each-ref --count=1 --sort=-v:refname --format='%(refname:short)' 'refs/tags/b[0-9]*'
 }
 
+# Which nerdctl a Lima VM uses: plain (rootless) or sudo (system containerd). The image decides,
+# as in the engine, because `nerdctl info` can succeed on a VM whose containers live under sudo.
+lima_nerdctl() {  # lima_nerdctl <vm> <image>
+    local n
+    for n in "nerdctl image inspect $2" "sudo nerdctl image inspect $2" "nerdctl info" "sudo nerdctl info"; do
+        # shellcheck disable=SC2086  # each entry is a command line
+        if limactl shell "$1" -- $n >/dev/null 2>&1 </dev/null; then
+            case "$n" in sudo*) echo "sudo nerdctl" ;; *) echo nerdctl ;; esac
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Record what setup actually built, so the next machine can reproduce it.
 record() {
     mkdir -p "$OH_WS"

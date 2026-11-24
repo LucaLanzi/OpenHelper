@@ -475,6 +475,18 @@ describe("setup scripts", () => {
     expect(out).toContain("npm test");
     expect(out).not.toContain("npm install");
   });
+  it("picks the nerdctl that has the sandbox image", () => {
+    const dir = tempWorkspace();
+    // Plain `nerdctl info` always works; the image exists under sudo only when SUDO_IMAGE=0.
+    chmodSync(write(dir, "bin/limactl", '#!/bin/sh\nshift 3\ncase "$*" in\n"sudo nerdctl image inspect img") exit "$SUDO_IMAGE" ;;\n"nerdctl info") exit 0 ;;\nesac\nexit 1\n'), 0o755);
+    const pick = (sudoImage: string) =>
+      execFileSync("bash", ["-c", '. "$1/scripts/lib.sh"; PATH="$2:$PATH"; lima_nerdctl vm img', "_", REPO_ROOT, join(dir, "bin")], {
+        encoding: "utf8",
+        env: { ...process.env, SUDO_IMAGE: sudoImage },
+      }).trim();
+    expect(pick("0")).toBe("sudo nerdctl");
+    expect(pick("1")).toBe("nerdctl");
+  });
 });
 
 describe("doc packs", () => {
