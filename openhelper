@@ -25,6 +25,7 @@ case "${1:-help}" in
         use_node
         npm run typecheck
         npm test
+        npm test -w dashboard
         shellcheck -x openhelper scripts/*.sh packs/languages/scripts/*.sh
         ;;
     *)

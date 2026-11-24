@@ -4,7 +4,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "vite";
 import { fileURLToPath } from "node:url";
-const {chromium}=await import(process.env.OPENHELPER_PLAYWRIGHT_MODULE || "playwright");
+let chromium;
+try{({chromium}=await import(process.env.OPENHELPER_PLAYWRIGHT_MODULE || "playwright"));}
+catch{console.log("Skipped dashboard browser tests: Playwright is not installed. Install it, or set OPENHELPER_PLAYWRIGHT_MODULE (and OPENHELPER_CHROME to use an installed Chrome).");process.exit(0);}
 const server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),server:{host:"127.0.0.1",port:0}});
 await server.listen();
 const port=server.httpServer.address().port;

@@ -13,6 +13,14 @@
 - **Control plane**: the dashboard and the `control` role. It can see and configure every platform it has a token for. Starting a workflow is a control-plane action.
 - **Data plane**: work handed from one platform's agent to another's. Every hand-off after the first step goes through the link policy (`links.toml`): isolated by default, one-way or two-way, with hop, token and time budgets and a kill switch. The receiving platform checks its own `links.toml` too.
 
+## Agent hooks
+
+A platform can ask another to do one of a fixed list of operations, `POST /api/hooks`: `health`, `capabilities`, `models`, `job-status`, `job-logs`, `index-estimate`, `start-job`, `cancel-job`, `index` and `workflow-step`. Each platform file lists the hooks it accepts (`hooks`). A hook goes through the sender's and the receiver's link policy, its budgets and the kill switch, and is audited on both sides. A platform only sees and cancels jobs it started itself. There is no way to send a shell command.
+
+A remote job carries the job request, the project name and its settings. Repos, docs and models are not copied: the same project must exist on the other machine with paths that are valid there. If that machine is offline, the request fails and nothing is moved to another machine.
+
+SSH settings are only used to test a connection with a fixed command (`echo`), through the OS SSH agent, with strict host-key checking. Tokens and keys are never stored in platform files, only the name of the secret that holds them.
+
 ## A workflow, step by step
 
 1. You start `implement-feature` with a task. The planner step runs on `@plan` (an alias set in `config.toml`).
@@ -35,7 +43,11 @@ The eval measures how often "Checked" was actually right (`green_precision`), pe
 
 ## Search
 
-Each project has an index of its repos and doc packs: chunks in `chunks.jsonl`, a BM25 keyword index, and, if an embedding model is configured, vectors. Search combines the two rankings with reciprocal rank fusion. Secrets are scrubbed and secret files skipped before indexing.
+Each project has an index of its repos and doc packs: chunks in `chunks.jsonl`, a BM25 keyword index, and, if an embedding model is configured, vectors. Search combines the two rankings with reciprocal rank fusion. Secrets are scrubbed and secret files skipped before indexing. Generated coverage reports (`coverage/`, `htmlcov/`) are skipped, and lines repeated on more than half of a doc pack's pages (menus, footers) are blanked.
+
+Embeddings are cached in `workspace/cache/embeddings/<model>.bin`, keyed by a hash of the exact text, shared by all projects and appended after every batch. A failed or canceled build keeps its work, and a rebuild only embeds new or changed chunks. Delete the file to reset it.
+
+Index time estimates use, in order: this platform's past builds with the same embedding model, its measured benchmark rates, then a broad initial range from its CPU and memory. Builds that were mostly cached are not used as samples.
 
 ## Evals
 
@@ -50,5 +62,5 @@ workspace/      one user's data — never committed
   platforms/    one file per machine
   links.toml    which machine may hand work to which
   projects/     one file per project
-  plans/ jobs/ runs/ results/ index/ evals/ docs/ audit/ secrets/ state/
+  plans/ jobs/ runs/ results/ index/ evals/ docs/ audit/ secrets/ state/ cache/
 ```

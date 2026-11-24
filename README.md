@@ -18,11 +18,13 @@ This installs everything, starts OpenHelper and opens the dashboard, already sig
 
 To open the dashboard later, go to <http://127.0.0.1:8740>. If it asks you to sign in, run `./openhelper open`. `workspace/` holds your private data and is never committed.
 
-## Add a repo
+## Add a project
 
-On the **Projects** page, choose the repo's folder and press **Add repo**. OpenHelper detects its languages, fetches their docs and builds the search index. Press **Rebuild index** after large changes.
+A project is one or more repos plus the docs and search settings used for them. On the **Projects** page, the setup steps ask for the repos, show the languages found and let you pick their checks, then the docs, the models, the machine that runs the work and the search mode. Nothing is saved until you press **Confirm and create project** on the review screen. That screen also shows how long the first index build will probably take. Press **Rebuild index** after large changes. A rebuild only embeds the parts that changed.
 
-Some docs, like `cppreference`, must be downloaded by hand from [their site](https://en.cppreference.com/w/Cppreference:Archives). Add the `.zip`, `.tar.*` or folder on the **Library** page, then rebuild the index.
+Some docs, like `cppreference`, must be downloaded by hand from [their site](https://en.cppreference.com/w/Cppreference:Archives). Add the `.zip`, `.tar.*` or folder on the **Library** page, then rebuild the index. Docs are shared by every project on the machine.
+
+**Remove project** in a project's panel lists what will be deleted first: its config, search index, evals and results. Your repos, shared docs, models, job logs and audit history stay.
 
 ## Use it
 
@@ -48,6 +50,8 @@ If the sandbox doesn't have the language's tools, add them to `sandbox/Dockerfil
 
 On the **Models** page, press **Use as main**, **Use as light** or **Benchmark** on any downloaded model.
 
+To free disk space, press **Delete file** on a model this machine isn't using. It stays on the list, so you can download it again.
+
 To add one, paste a direct link to its `.gguf` file under **Add a model**, then press **Download**. Models over about 20 GB on a Mac also need one terminal command, because it asks for your password: `scripts/mac-gpu-limit.sh`.
 
 ## Copy weights to another machine
@@ -66,12 +70,16 @@ rsync -av workspace/index/my-repo/ other:OpenHelper/workspace/index/my-repo/
 
 Then press **Use as main** on its **Models** page. An index needs the same embedding model on both machines. If the repo path differs, update `repos` under **Settings**. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
 
+## Connect another machine
+
+On the **Platforms** page, open **Connect another OpenHelper instance with Tailscale**. Enter the other machine's Tailscale name or IP (`tailscale ip -4` prints it), press **Check this address**, then save it with the name of the secret that holds its token. Any OS or hardware works. Agent hooks only allow the operations ticked for that machine, and only where a link allows it.
+
 ## Update
 
 Press **Update** on the **System** page.
 
 ## More
 
-[Setup](docs/SETUP.md) · [Packs](docs/PACKS.md) · [Sandbox](docs/SANDBOX.md) · [Editors](docs/HARNESS.md) · [Architecture](docs/ARCHITECTURE.md) · [Verification](docs/VERIFY-ON-HARDWARE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[Setup](docs/SETUP.md) · [Upgrading](docs/UPGRADING.md) · [Packs](docs/PACKS.md) · [Sandbox](docs/SANDBOX.md) · [Editors](docs/HARNESS.md) · [Architecture](docs/ARCHITECTURE.md) · [Verification](docs/VERIFY-ON-HARDWARE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 MIT license. Models and doc packs have their own licenses.
