@@ -5,7 +5,7 @@ After=network.target
 [Service]
 # systemd user services start with a minimal PATH; use the one from install time.
 Environment=PATH=@PATH@
-ExecStart=@SWAP@ --config @WS@/llama-swap.yaml --listen 127.0.0.1:@PORT@
+ExecStart=@SWAP@ --config @WS@/llama-swap.yaml --watch-config --listen 127.0.0.1:@PORT@
 Restart=on-failure
 RestartSec=5
 

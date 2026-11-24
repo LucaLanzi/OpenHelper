@@ -80,13 +80,18 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     log(`embedding ${chunks.length} chunks with ${opts.embedModel}`);
     const batch = 32;
     const all: number[][] = [];
-    for (let i = 0; i < chunks.length; i += batch) {
-      const part = chunks.slice(i, i + batch).map((c) => `${c.title}\n${c.text}`.slice(0, 4000));
-      all.push(...(await opts.llm.embed(opts.embedModel, part)));
+    try {
+      for (let i = 0; i < chunks.length; i += batch) {
+        const part = chunks.slice(i, i + batch).map((c) => `${c.title}\n${c.text}`.slice(0, 4000));
+        all.push(...(await opts.llm.embed(opts.embedModel, part)));
+      }
+      dims = all[0]?.length ?? 0;
+      vectors = new Float32Array(all.length * dims);
+      all.forEach((v, i) => vectors!.set(v, i * dims));
+    } catch (e) {
+      // Keyword search still works, so a model server problem shouldn't leave the repo unsearchable.
+      log(`embeddings failed (${(e as Error).message}); building a keyword-only index`);
     }
-    dims = all[0]?.length ?? 0;
-    vectors = new Float32Array(all.length * dims);
-    all.forEach((v, i) => vectors!.set(v, i * dims));
   }
 
   const meta: IndexMeta = {

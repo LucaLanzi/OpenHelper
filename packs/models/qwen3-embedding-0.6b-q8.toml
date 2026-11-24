@@ -8,15 +8,15 @@ active_params_b = 0.6
 quant = "Q8_0"
 size_gb = 0.7
 roles = ["embed"]
-license = "apache-2.0 (confirm on the model card)"
+license = "Apache-2.0"
 min_usable_gb = 2
 ctx_default = 8192
 tokenizer = "qwen3"
 server_args = ["--embedding", "--pooling", "last"]
 verified = false
-sha256 = ""
-notes = "Search works without it (keyword-only) until it is pinned."
+sha256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"
+notes = "Search works without it (keyword-only)."
 
 [source]
-hf_repo = ""
-filename = ""
+hf_repo = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+filename = "Qwen3-Embedding-0.6B-Q8_0.gguf"

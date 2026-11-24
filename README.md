@@ -12,32 +12,11 @@ Needs macOS on Apple Silicon (Ubuntu with an NVIDIA GPU is untested), 16 GB of m
 git clone https://github.com/LucaLanzi/OpenHelper.git
 cd OpenHelper
 make install
-
-make download-model ID=qwen3-8b-q4km \
-  URL=https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
-make download-model ID=qwen3-embedding-0.6b-q8 \
-  URL=https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
 ```
 
-Set the models in `workspace/platforms/<machine>.toml`:
+This installs everything, starts OpenHelper and opens the dashboard, already signed in. The **Setup** page then takes you through downloading the model (5.7 GB), setting up the sandbox and adding a repo.
 
-```toml
-[model]
-current = "qwen3-8b-q4km"
-light = "qwen3-8b-q4km"
-embed = "qwen3-embedding-0.6b-q8"
-```
-
-Then start everything:
-
-```bash
-make llama-swap-config
-make sandbox-vm
-make install-service
-make token
-```
-
-Open <http://127.0.0.1:8740> and paste the token. `workspace/` holds your private data and is never committed.
+To open the dashboard later, go to <http://127.0.0.1:8740> or run `make open`. `workspace/` holds your private data and is never committed.
 
 ## Add a repo
 

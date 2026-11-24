@@ -32,16 +32,14 @@ Usable model memory: 35 GB  →  tier M (reference baseline: 2080 Ti desktop, 32
 Download: 43.7 GB   Disk needed (with 20% margin): 82 GB
 ```
 
-Then:
+It then starts llama-swap and the engine as user services and opens the dashboard with a one-time sign-in link. The **Setup** page downloads Qwen3-8B and the embedding model, sets up the sandbox and adds your first repo. `make open` opens it again; from another device, sign in with `make token`.
+
+For a larger model than the Setup page offers:
 
 ```bash
 make download-model ID=qwen3.6-35b-a3b-q4km   # asks first; pins the file's SHA-256
 make tune ID=qwen3.6-35b-a3b-q4km             # NVIDIA + MoE only: find how many expert layers fit in VRAM
-make install-service                          # llama-swap + engine as user services
-make token                                    # for the dashboard login
 ```
-
-Open http://127.0.0.1:8740 and paste the token.
 
 ### Memory tiers
 

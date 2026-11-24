@@ -7,6 +7,7 @@
   <array>
     <string>@SWAP@</string>
     <string>--config</string><string>@WS@/llama-swap.yaml</string>
+    <string>--watch-config</string>
     <string>--listen</string><string>127.0.0.1:@PORT@</string>
   </array>
   <key>EnvironmentVariables</key>

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, createReadStream, existsSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -18,6 +19,7 @@ import { LlmClient } from "./llm/client.js";
 import { mineProject, saveTasks, loadTasks } from "./miner/mine.js";
 import { addProject } from "./projects.js";
 import { makeSandbox } from "./sandbox/sandbox.js";
+import { newLoginCode } from "./setup.js";
 import { serveStdio } from "./mcp.js";
 import { llamaSwapConfig, modelFile } from "./swapconfig.js";
 import { stringify as toYaml } from "yaml";
@@ -54,6 +56,7 @@ Setup
   models pin ID --file PATH [--url URL]  record a downloaded model's file name, source and SHA-256
   models path ID                  print where the model file is expected
   token                           print this machine's API token (for the dashboard login)
+  open                            open the dashboard, signed in with a one-time link
 
 Projects
   add-project PATH [--name N]     register a repo as a project (detects languages, suggests doc packs)
@@ -113,6 +116,27 @@ async function main() {
     case "token":
       out(ensureApiToken());
       return;
+
+    case "open": {
+      const cfg = loadConfig();
+      if (cfg.bind !== "127.0.0.1" && cfg.bind !== "localhost") {
+        out(`Open http://${cfg.bind}:${cfg.port} and sign in with the token from \`make token\`.`);
+        return;
+      }
+      const base = `http://127.0.0.1:${cfg.port}`;
+      let up = false;
+      for (let i = 0; i < 60 && !up; i++) {
+        up = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
+        if (!up) await new Promise((r) => setTimeout(r, 500));
+      }
+      if (!up) throw new Error(`the engine is not answering on ${base}; check workspace/logs/`);
+      ensureApiToken();
+      // In the fragment, so the code never reaches a server log.
+      const url = `${base}/#/login/${newLoginCode()}`;
+      const opened = spawnSync(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" }).status === 0;
+      out(opened ? "Opened the dashboard in your browser." : `Open this link on this machine within 5 minutes:\n  ${url}`);
+      return;
+    }
 
     case "detect": {
       const hw = detectHardware(ws.root());

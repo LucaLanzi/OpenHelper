@@ -31,6 +31,7 @@ import { loadTasks } from "./miner/mine.js";
 import { addProject, pickPath } from "./projects.js";
 import { Runtime } from "./runtime.js";
 import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
+import { redeemLoginCode } from "./setup.js";
 import { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
 
@@ -73,7 +74,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
 
   // --- auth: every /api route except health needs the bearer token -------------------------
   app.addHook("onRequest", async (req, reply) => {
-    if (!req.url.startsWith("/api/") || req.url === "/api/health") return;
+    // /api/login takes a one-time code instead, and only from this machine.
+    if (!req.url.startsWith("/api/") || req.url === "/api/health" || req.url === "/api/login") return;
     const header = req.headers.authorization ?? "";
     // EventSource cannot send headers, so the event stream alone accepts ?token=.
     const q = req.url.startsWith("/api/events") ? new URL(req.url, "http://x").searchParams.get("token") ?? "" : "";
@@ -170,14 +172,31 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   );
 
   // These read paths on this machine, so a token used from another device can't reach them.
+  const isLocal = (req: FastifyRequest) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip);
   const localOnly = (req: FastifyRequest) => {
-    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip)) throw new HttpError(403, "open the dashboard on this machine to do this");
+    if (!isLocal(req)) throw new HttpError(403, "open the dashboard on this machine to do this");
   };
 
-  app.get("/api/host", async (req) => {
-    const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.ip);
-    return { local, picker: local && process.platform === "darwin" };
+  app.get("/api/host", async (req) => ({ local: isLocal(req), picker: isLocal(req) && process.platform === "darwin" }));
+
+  app.post("/api/login", async (req) => {
+    localOnly(req);
+    const { code } = body<{ code?: string }>(req);
+    if (!code || !redeemLoginCode(code)) throw new HttpError(401, "that sign-in link has expired or was already used");
+    audit("user", "login.link");
+    return { token: apiToken() };
   });
+
+  app.get("/api/setup", async () => rt.setupStatus());
+
+  for (const [path, type] of [["/api/setup/model", "setup-model"], ["/api/setup/sandbox", "setup-sandbox"]] as const) {
+    app.post(path, async (req) => {
+      localOnly(req);
+      const job = rt.queue.create({ type, project: "", platform: rt.platform.name, model: "", input: {} });
+      rt.queue.start(job.id);
+      return job;
+    });
+  }
 
   app.post("/api/pick", async (req) => {
     localOnly(req);

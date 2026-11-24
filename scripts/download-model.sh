@@ -40,14 +40,29 @@ echo "From:    $url"
 echo "To:      $dest"
 free_gb="$(df -Pk "$dest_dir" | awk 'NR==2 {printf "%d", $4/1024/1024}')"
 echo "Free:    ${free_gb} GB"
+
+file_sha() { if have shasum; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+
+if [ -n "$pinned_sha" ] && [ -f "$dest" ] && [ "$(file_sha "$dest")" = "$pinned_sha" ]; then
+    log "already downloaded; SHA-256 matches the pinned value"
+    exit 0
+fi
 confirm "Download it?" || die "cancelled"
 
-curl -fL --retry 3 -C - -o "$dest" "$url"
 if [ -n "$pinned_sha" ]; then
+    # Download beside the real name, so a partial or bad file is never taken for the model.
+    part="$dest.part"
+    if [ -f "$dest" ] && [ ! -f "$part" ]; then mv "$dest" "$part"; fi
+    curl -fL --retry 3 -C - -o "$part" "$url"
     # A pinned model must match its hash exactly; a mismatch is a stop, not a fix.
-    if have shasum; then got="$(shasum -a 256 "$dest" | cut -d' ' -f1)"; else got="$(sha256sum "$dest" | cut -d' ' -f1)"; fi
-    [ "$got" = "$pinned_sha" ] || die "SHA-256 mismatch for $dest (expected $pinned_sha, got $got). Not using it."
+    got="$(file_sha "$part")"
+    if [ "$got" != "$pinned_sha" ]; then
+        rm -f "$part"
+        die "SHA-256 mismatch for $dest (expected $pinned_sha, got $got). Not using it."
+    fi
+    mv "$part" "$dest"
     log "SHA-256 matches the pinned value"
 else
+    curl -fL --retry 3 -C - -o "$dest" "$url"
     oh models pin "$id" --file "$dest" --url "$url"
 fi

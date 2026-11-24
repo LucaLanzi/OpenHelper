@@ -6,7 +6,7 @@ import { ensureDir, listFiles, readJson, writeFileAtomic } from "../core/fsutil.
 import { ws } from "../core/paths.js";
 import { newId } from "../core/util.js";
 
-export type JobType = "explain" | "plan" | "implement" | "review" | "check" | "index" | "docs" | "docs-local" | "setup" | "eval" | "mine";
+export type JobType = "explain" | "plan" | "implement" | "review" | "check" | "index" | "docs" | "docs-local" | "setup" | "setup-model" | "setup-sandbox" | "eval" | "mine";
 export type JobStatus = "created" | "queued" | "running" | "done" | "failed" | "canceled";
 
 export interface Job {

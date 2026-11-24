@@ -6,16 +6,20 @@ import { runChecks } from "./checks/runner.js";
 import { audit } from "./core/audit.js";
 import { readJson, writeFileAtomic } from "./core/fsutil.js";
 import { createWorktree, headSha, removeWorktree } from "./core/git.js";
-import { findProject, loadConfig, loadDocPacks, loadLanguages, loadModels, loadPlatforms } from "./core/load.js";
-import { ws } from "./core/paths.js";
+import { findProject, loadConfig, loadDocPacks, loadFile, loadLanguages, loadModels, loadPlatforms, loadProjects } from "./core/load.js";
+import { repoRoot, ws } from "./core/paths.js";
+import { Platform as PlatformSchema } from "./core/schemas.js";
 import type { CheckKind, Platform, WorkspaceConfig } from "./core/schemas.js";
+import { apply, readConfigFile, stage } from "./core/staging.js";
 import { buildIndex, expandHome } from "./index/build.js";
 import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
 import { JobQueue, type Job } from "./jobs/queue.js";
 import { LlmClient } from "./llm/client.js";
 import { runEval } from "./miner/eval.js";
 import { loadTasks, mineProject, saveTasks } from "./miner/mine.js";
-import { makeSandbox } from "./sandbox/sandbox.js";
+import { limaState, makeSandbox } from "./sandbox/sandbox.js";
+import { runScript, STARTER_MODELS } from "./setup.js";
+import { llamaSwapConfig, modelFile } from "./swapconfig.js";
 
 interface State {
   current_model?: string;
@@ -101,6 +105,20 @@ export class Runtime {
       log(`added ${files} files for ${String(job.input.pack)}; rebuild a project's index to use them`);
       return { files };
     }
+    if (job.type === "setup-model") {
+      for (const id of STARTER_MODELS) {
+        if (this.hasModel(id)) log(`${id}: already downloaded`);
+        else await runScript("download-model.sh", [id], { OH_YES: "1" }, log, signal);
+      }
+      await this.useStarterModels();
+      log("models are ready");
+      return { models: [...STARTER_MODELS] };
+    }
+    if (job.type === "setup-sandbox") {
+      await runScript("sandbox-vm.sh", [], { YES: "1" }, log, signal);
+      this.reload();
+      return { driver: this.platform.sandbox.driver };
+    }
     const ctx = this.ctx(job, log, signal);
     const s = (k: string) => (typeof job.input[k] === "string" ? (job.input[k] as string) : "");
     switch (job.type) {
@@ -169,6 +187,57 @@ export class Runtime {
       default:
         throw new Error(`unknown job type ${String(job.type)}`);
     }
+  }
+
+  private hasModel(id: string): boolean {
+    const m = loadModels().find((x) => x.id === id);
+    return Boolean(m && existsSync(modelFile(m)));
+  }
+
+  /** Points this machine at the starter models, keeping any role whose model is already here. */
+  private async useStarterModels(): Promise<void> {
+    const rel = `platforms/${this.platform.name}.toml`;
+    const [main, embed] = STARTER_MODELS;
+    let text = readConfigFile(rel);
+    const set = (key: string, value: string) => {
+      text = text.replace(new RegExp(`^${key}\\s*=.*$`, "m"), `${key} = "${value}"`);
+    };
+    if (!this.hasModel(this.platform.model.current)) set("current", main);
+    if (!this.hasModel(this.platform.model.light)) set("light", main);
+    if (!this.hasModel(this.platform.model.embed)) set("embed", embed);
+    const staged = stage(rel, text, (f) => void loadFile(PlatformSchema, f));
+    if (!staged.valid) throw new Error(`could not update ${rel}: ${staged.error}`);
+    const applied = await apply(rel, async () => {
+      this.reload();
+      return true;
+    });
+    if (!applied.applied) throw new Error(`could not update ${rel}: ${applied.error}`);
+    // llama-swap watches this file and reloads it.
+    const server = join(repoRoot(), "vendor", "llama.cpp", "build", "bin", "llama-server");
+    writeFileAtomic(join(ws.root(), "llama-swap.yaml"), llamaSwapConfig(this.platform, loadModels(), server));
+  }
+
+  async setupStatus() {
+    const models = loadModels();
+    const { driver, vm } = this.platform.sandbox;
+    const sandbox = driver === "lima" ? await limaState(vm) : driver;
+    const model_ready = this.hasModel(this.currentModel) && this.hasModel(this.platform.model.embed);
+    const sandbox_ready = driver !== "none" && sandbox !== "missing";
+    const all = loadProjects();
+    const projects = all.length;
+    const indexed = all.filter((p) => existsSync(join(ws.index(p.name), "meta.json"))).length;
+    return {
+      starter: STARTER_MODELS.flatMap((id) => {
+        const m = models.find((x) => x.id === id);
+        return m ? [{ id, name: m.name, size_gb: m.size_gb, license: m.license, present: this.hasModel(id) }] : [];
+      }),
+      model_ready,
+      sandbox,
+      sandbox_ready,
+      projects,
+      indexed,
+      done: model_ready && sandbox_ready && indexed > 0,
+    };
   }
 
   private async buildProjectIndex(ctx: AgentContext, log: (s: string) => void): Promise<Record<string, unknown>> {

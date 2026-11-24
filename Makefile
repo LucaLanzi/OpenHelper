@@ -11,16 +11,18 @@ OH := node server/dist/cli.js
 PROFILE ?= auto
 
 .PHONY: help install prereqs setup init detect plan build typecheck test lint-scripts check-all dev serve mock-llm \
-        llama-swap-config sandbox-vm sandbox-image install-service token download-model tune bench mac-gpu-limit \
+        llama-swap-config sandbox-vm sandbox-image install-service token open download-model tune bench mac-gpu-limit \
         add-project docs-list docs-fetch docs-add index mine-evals eval models pin audit clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-18s\033[0m %s\n", $$1, $$2}'
 
 # --- setting up a machine ----------------------------------------------------------------
-install: ## Everything for a new machine: system packages, then setup (YES=1 for no questions)
+install: ## Everything for a new machine, then opens the dashboard to finish (YES=1 for no questions)
 	./scripts/install-prereqs.sh
 	./scripts/setup.sh $(PROFILE)
+	./scripts/install-service.sh
+	@$(MAKE) --no-print-directory open
 
 prereqs: ## Install system packages only: build tools, Node.js 22, CUDA, check tools, sandbox
 	./scripts/install-prereqs.sh
@@ -72,6 +74,9 @@ install-service: build ## Install and start the model server and engine as user 
 token: ## Print this machine's API token (for the dashboard login)
 	@test -f server/dist/cli.js || $(MAKE) -s build >/dev/null
 	@$(OH) token
+
+open: ## Open the dashboard, signed in with a one-time link
+	@$(OH) open
 
 # --- projects -----------------------------------------------------------------------------
 add-project: build ## Register a repo as a project (REPO=~/code/repo, optional NAME=)

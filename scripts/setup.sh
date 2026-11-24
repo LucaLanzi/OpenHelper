@@ -114,11 +114,4 @@ fi
 
 log "plan for this machine:"
 oh plan
-cat <<MSG
-
-Next steps
-  1. Download the models in the plan:   make download-model ID=<model id>
-  2. Start the model server and engine:  make install-service   (or: make serve)
-  3. Open the dashboard:                 http://127.0.0.1:8740  (token: make token)
-  4. Add a project:                      make add-project REPO=~/code/your-repo
-MSG
+log "finish in the dashboard: make install-service, then make open"
