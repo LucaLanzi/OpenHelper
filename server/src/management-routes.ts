@@ -11,7 +11,7 @@ import { ws } from "./core/paths.js";
 import { Project } from "./core/schemas.js";
 import { resolvePlatform } from "./core/workflow-def.js";
 import { callHook, executeHook, ProjectSettings } from "./hooks.js";
-import { exportEmbeddings, importEmbeddings } from "./index/embed-cache.js";
+import { exportEmbeddings, exportFile, importEmbeddings } from "./index/embed-cache.js";
 import { embeddingModel, estimateIndex, workload } from "./index/estimate.js";
 import { expandHome } from "./index/build.js";
 import { previewProject, removalPaths, removeProjectFiles, saveProject, updateProject, validateProject } from "./project-management.js";
@@ -56,7 +56,7 @@ export function managementRoutes(app: FastifyInstance, rt: Runtime, engine: Work
   });
   app.post("/api/projects/:id/embeddings/export", async req => {
     const id = idOf(req); project(id);
-    const file = join(ws.root(),"exports",`${id}-embeddings-${new Date().toISOString().slice(0,10)}.ohemb.gz`);
+    const file = exportFile(id);
     const r = client(()=>exportEmbeddings(id,file)); audit("user","embeddings.export",{project:id,model:r.model,count:r.count});
     return {...r,path:file};
   });

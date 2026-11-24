@@ -45,7 +45,9 @@ The eval measures how often "Checked" was actually right (`green_precision`), pe
 
 Each project has an index of its repos and doc packs: chunks in `chunks.jsonl`, a BM25 keyword index, and, if an embedding model is configured, vectors. Search combines the two rankings with reciprocal rank fusion. Secrets are scrubbed and secret files skipped before indexing. Generated coverage reports (`coverage/`, `htmlcov/`) are skipped, and lines repeated on more than half of a doc pack's pages (menus, footers) are blanked.
 
-Embeddings are cached in `workspace/cache/embeddings/<model>.bin`, keyed by a hash of the exact text, shared by all projects and appended after every batch. A failed or canceled build keeps its work, and a rebuild only embeds new or changed chunks. Delete the file to reset it.
+Embeddings are cached in `workspace/cache/embeddings/<model>.bin`, keyed by a hash of the exact text, shared by all projects and appended after every batch. A failed or canceled build keeps its work, and a rebuild only embeds new or changed chunks. Delete the file to reset it. Changing a project's embedding model re-embeds everything once, and the old model's cache stays for switching back.
+
+`embeddings export` writes a project's index vectors to `workspace/exports/<project>-embeddings-<date>.ohemb.gz`: gzip of one JSON header line (model, dims, count), then the same `[sha1][float32 × dims]` records as the cache. `embeddings import` appends the records this machine's cache lacks, so the next build there finds them. The keys are hashes of the text the model sees, and chunk titles use repo-relative paths, so they match when the repo is somewhere else.
 
 Index time estimates use, in order: this platform's past builds with the same embedding model, its measured benchmark rates, then a broad initial range from its CPU and memory. Builds that were mostly cached are not used as samples.
 

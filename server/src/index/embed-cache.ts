@@ -87,6 +87,9 @@ const ExportHeader = z.object({
   count: z.number().int().nonnegative(),
 });
 
+/** Where an export goes unless told otherwise: workspace/exports/, which git never sees. */
+export const exportFile = (project: string) => join(ws.root(), "exports", `${project}-embeddings-${new Date().toISOString().slice(0, 10)}.ohemb.gz`);
+
 /**
  * Writes a project's index embeddings to a gzip file another machine can import into its cache:
  * one JSON header line, then cache-format [hash][dims float32] records. Keys are content hashes and

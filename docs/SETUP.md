@@ -91,7 +91,7 @@ A machine that only runs agents can set `roles = ["node"]` in its `config.toml`.
 
 1. Install Tailscale on the desktop and the phone.
 2. In `workspace/config.toml` on the desktop, set `bind` to the desktop's Tailscale IP (`tailscale ip -4`).
-3. `systemctl --user restart openhelper`, then open `http://<tailscale-ip>:8740` on the phone.
+3. Restart the engine (Linux: `systemctl --user restart openhelper`; macOS: `launchctl kickstart -k gui/$(id -u)/dev.openhelper.engine`), then open `http://<tailscale-ip>:8740` on the phone.
 
 From another device you can use and manage models, change a project's models and search, and export its embeddings. A few actions still need a browser on the desktop itself: the Setup page, adding or removing projects, doc packs, languages and platforms, importing embeddings, and restart or update. The desktop's own Tailscale address counts as local, so `http://<tailscale-ip>:8740` works there too.
 

@@ -16,7 +16,7 @@ import { makePlan, TIERS, type Tier } from "./core/tiers.js";
 import { buildIndex } from "./index/build.js";
 import { embeddingModel } from "./index/estimate.js";
 import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
-import { exportEmbeddings, importEmbeddings } from "./index/embed-cache.js";
+import { exportEmbeddings, exportFile, importEmbeddings } from "./index/embed-cache.js";
 import { LlmClient } from "./llm/client.js";
 import { mineProject, saveTasks, loadTasks } from "./miner/mine.js";
 import { addProject } from "./projects.js";
@@ -64,7 +64,7 @@ Projects
   add-project PATH [--name N]     register a repo as a project (detects languages, suggests doc packs)
   docs list | fetch ID | add-local ID PATH
   index PROJECT                   build the project's search index (repos + its doc packs)
-  embeddings export PROJECT [--out FILE]  write the index's embeddings to a .ohemb.gz file
+  embeddings export PROJECT [--out FILE]  write the index's embeddings to workspace/exports/ (or FILE)
   embeddings import FILE          add exported embeddings to this machine's cache; then rebuild the index
   mine-evals PROJECT [--limit N]  build eval tasks from the project's git history
   check DIR [--sandbox docker]    run the language-pack checks on a directory
@@ -258,7 +258,7 @@ async function main() {
       const sub = a._[1];
       if (sub === "export") {
         const project = findProject(a._[2] ?? "").name;
-        const file = resolve(str(a, "out", `${project}-embeddings-${new Date().toISOString().slice(0, 10)}.ohemb.gz`));
+        const file = resolve(str(a, "out", exportFile(project)));
         const r = exportEmbeddings(project, file);
         out(`wrote ${r.count} ${r.model} embeddings to ${file} (${(r.bytes / 1e6).toFixed(1)} MB)`);
         out("Copy it to the other machine (scp), then run `./openhelper embeddings import FILE` there and rebuild the index.");

@@ -62,7 +62,7 @@ If the sandbox doesn't have the language's tools, add them to `sandbox/Dockerfil
 
 ## Swap models
 
-On the **Models** page, press **Use as main**, **Use as light** or **Benchmark** on any downloaded model.
+On the **Models** page, press **Use as main**, **Use as light** or **Benchmark** on any downloaded model. That sets the machine's defaults. To change the models for one project only, see [Search and embeddings](#search-and-embeddings).
 
 To free disk space, press **Delete file** on a model this machine isn't using. It stays on the list, so you can download it again.
 
@@ -84,17 +84,59 @@ rsync -av workspace/index/my-repo/ other:OpenHelper/workspace/index/my-repo/
 
 Then press **Use as main** on its **Models** page. An index needs the same embedding model on both machines. If the repo path differs, update `repos` under **Settings**. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
 
-## Embed on one machine, use on another
+## Search and embeddings
 
-Embeddings are the slow part of an index. You can run them on the machine with the faster GPU and move them to the other machine. Both machines need the same embedding model, and the repo can be at a different path on each.
+Before the model answers, OpenHelper searches the project's index for passages from your repos and docs. A project uses one of two search modes:
 
-1. On the fast machine, open **Projects** → **Models and embeddings**, choose hybrid search and the embedding model, save, then rebuild the index.
-2. Press **Export embeddings**. It writes `workspace/exports/<project>-embeddings-<date>.ohemb.gz` and shows the `scp` command.
-3. On the other machine, open the same panel, choose the same embedding model, enter the file under **Embeddings file to import**, and press **Import embeddings**. It then offers the index rebuild, which embeds only chunks that changed since the export.
+- **Keyword:** finds passages that share words with the question. Builds fast and needs no extra model.
+- **Hybrid:** keywords plus embeddings, which also find passages that say the same thing in other words. It gives better answers to vague questions, but every passage has to go through the embedding model first. That is the slow part of building an index.
 
-From a terminal: `./openhelper embeddings export PROJECT [--out FILE]` and `./openhelper embeddings import FILE`, then `./openhelper index PROJECT`.
+### Change a project's models
 
-The same panel changes a project's main, light and embedding models at any time. The index keeps using its old embeddings until you rebuild it.
+On **Projects**, press **Models and embeddings** in the project's panel. Choose the main model, light model, search mode and embedding model, then press **Save models and search**. Nothing else about the project changes.
+
+| You change | Takes effect | Affects |
+|---|---|---|
+| Main or light model | The next job | Answer speed and quality. Not the index or its build time. |
+| Search mode | After **Rebuild index** | Build time, and how well search finds passages |
+| Embedding model | After **Rebuild index** | Build time, and how well search finds passages |
+
+Until you rebuild, the project keeps searching with its current index. The panel says when the index was built with a different embedding model than the one you chose.
+
+### What a rebuild costs
+
+- **Same embedding model:** only new or changed passages are embedded. The rest come from the cache.
+- **New embedding model:** every passage is embedded again, as slowly as a first build. Embeddings from different models can't be mixed.
+- **Back to a model you used before:** fast. Each embedding model keeps its own cache in `workspace/cache/embeddings/<model>.bin`, shared by all projects.
+- **Hybrid to keyword:** fast, nothing is embedded. Going back to hybrid reuses the cache.
+
+**Rebuild index** shows an estimate before it starts, based on this machine's past builds with that embedding model.
+
+### Choosing an embedding model
+
+An embedding model only works if it is downloaded on the **Models** page and this machine's model server offers it. A downloaded model is offered unless the platform file lists `allowed` models without it. Press **Use for search** to make it the machine's default, or pick it per project as above. If the model can't be reached, the build still finishes, but keyword-only, and the job log says `embeddings failed`.
+
+A smaller embedding model builds faster. A larger one may find better passages. To try another, paste its `.gguf` link under **Add a model** with the role set to embedding, download it, choose it for the project, rebuild, and compare answers with **Ask**. Switching back costs nothing, since the old model's cache stays.
+
+### Faster indexing
+
+- **Embed on the faster machine** and import the result (below).
+- **Exclude what you never ask about:** generated code, vendored dependencies, large fixtures. Edit `exclude` in `projects/<name>.toml` under **Settings**, then rebuild.
+- **Pick only the docs you need.** Doc packs are often most of the passages. They are cached, so a second project with the same docs builds fast.
+- **Use keyword search** where hybrid isn't worth the wait.
+
+To get faster answers rather than faster builds, use a smaller main or light model. On a Mac, also lower `retrieval_top_k` in `config.toml`, which sends the model fewer passages.
+
+### Embed on one machine, use on another
+
+You can run the embeddings on the machine with the faster GPU and move them to the other. Both machines need the same embedding model. The repo can be at a different path on each.
+
+1. On the fast machine, choose hybrid search and the embedding model in **Models and embeddings**, save, then press **Rebuild index**.
+2. Press **Export embeddings**. It writes `workspace/exports/<project>-embeddings-<date>.ohemb.gz` on that machine and shows the full path and an `scp` command.
+3. Copy the file over, for example `scp desktop:OpenHelper/workspace/exports/my-repo-embeddings-2026-11-24.ohemb.gz ~/`.
+4. On the other machine, choose the same embedding model in the same panel. Enter the file's path under **Embeddings file to import**, press **Import embeddings**, then confirm the index build. It embeds only passages that changed since the export.
+
+From a terminal: `./openhelper embeddings export PROJECT` (add `--out FILE` to write it somewhere else) and `./openhelper embeddings import FILE`, then `./openhelper index PROJECT`. Import needs a browser on the machine itself, because it reads a file there.
 
 ## Connect another machine
 
