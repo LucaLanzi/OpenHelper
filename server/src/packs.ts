@@ -1,10 +1,10 @@
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { detectLanguages } from "./checks/runner.js";
 import { toToml, writeFileAtomic } from "./core/fsutil.js";
-import { loadDocPacks, loadLanguages, loadModels } from "./core/load.js";
+import { loadDocPacks, loadLanguages, loadModels, loadProjects } from "./core/load.js";
 import { ws } from "./core/paths.js";
-import { LanguagePack, ModelPack, type ModelRole, type Project } from "./core/schemas.js";
+import { DocPack, LanguagePack, ModelPack, type ModelRole, type Project } from "./core/schemas.js";
 import { slugify } from "./core/util.js";
 import { walkFiles } from "./core/walk.js";
 import { expandHome } from "./index/build.js";
@@ -61,6 +61,37 @@ export function addLanguagePack(o: { name: string; extensions: string; test?: st
     checks: test ? [{ id: "test", name: test, kind: "test", order: 40, run: test, requires: [test.split(/\s+/)[0]], timeout_s: 1800 }] : [],
   });
   writeFileAtomic(join(ws.packs(), "languages", `${id}.toml`), toToml(pack as unknown as Record<string, unknown>));
+  return pack;
+}
+
+/** Removes a language pack added on this machine. Built-in packs and packs a project uses stay. */
+export function removeLanguagePack(id: string): void {
+  const f = join(ws.packs(), "languages", `${id}.toml`);
+  if (!existsSync(f)) throw new Error(`${id} is not a language added on this machine`);
+  const users = loadProjects().filter((p) => p.languages.includes(id)).map((p) => p.name);
+  if (users.length) throw new Error(`${id} is used by ${users.join(", ")}; remove it from those projects first`);
+  unlinkSync(f);
+}
+
+/** A documentation pack from a name and, optionally, a download link. Without a link, add a local copy. */
+export function addDocPack(o: { name: string; version?: string; license?: string; homepage?: string; url?: string; format?: string }): DocPack {
+  const name = o.name.trim();
+  if (!name) throw new Error("enter a documentation name");
+  const id = slugify(name, 40);
+  if (loadDocPacks().some((p) => p.id === id)) throw new Error(`documentation ${id} already exists`);
+  const url = o.url?.trim();
+  if (url && !url.startsWith("https://")) throw new Error("the link must start with https://");
+  const homepage = o.homepage?.trim() ?? "";
+  if (homepage && !/^https?:\/\//.test(homepage)) throw new Error("the homepage must start with https://");
+  const pack = DocPack.parse({
+    id,
+    name,
+    version: o.version?.trim() || "unversioned",
+    license: o.license?.trim() || "check the source",
+    homepage,
+    sources: url ? [{ url, format: o.format || "tar" }] : [],
+  });
+  writeFileAtomic(join(ws.packs(), "docs", `${id}.toml`), toToml(pack as unknown as Record<string, unknown>));
   return pack;
 }
 

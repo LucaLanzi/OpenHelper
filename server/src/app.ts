@@ -34,7 +34,7 @@ import { expandHome, openIndex } from "./index/build.js";
 import { docStatus } from "./index/docs.js";
 import type { Job, JobType } from "./jobs/queue.js";
 import { loadTasks } from "./miner/mine.js";
-import { addLanguagePack, addModelPack, redetected } from "./packs.js";
+import { addDocPack, addLanguagePack, addModelPack, redetected, removeLanguagePack } from "./packs.js";
 import { addProject, pickPath } from "./projects.js";
 import { projectModel, Runtime } from "./runtime.js";
 import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
@@ -309,8 +309,16 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
 
   // --- languages ---------------------------------------------------------------------------
   app.get("/api/languages", async () =>
-    loadLanguages().map((l) => ({ id: l.id, name: l.name, detect: l.detect, checks: l.checks.map((c) => c.name), details: l.checks.map(({ id, name, kind, requires, when_files }) => ({ id, name, kind, requires, when_files })), sandbox: rt.platform.sandbox.driver })),
+    loadLanguages().map((l) => ({ id: l.id, name: l.name, detect: l.detect, checks: l.checks.map((c) => c.name), details: l.checks.map(({ id, name, kind, requires, when_files }) => ({ id, name, kind, requires, when_files })), sandbox: rt.platform.sandbox.driver, custom: existsSync(join(ws.packs(), "languages", `${l.id}.toml`)) })),
   );
+
+  app.delete("/api/languages/:id", async (req) => {
+    localOnly(req);
+    if (body<{ confirm?: boolean }>(req).confirm !== true) bad("confirm the removal");
+    clientError(() => removeLanguagePack(paramId(req)));
+    audit("user", "language.remove", { language: paramId(req) });
+    return { ok: true };
+  });
 
   // A language's test command runs on this machine when no sandbox is set up.
   app.post("/api/languages", async (req) => {
@@ -360,6 +368,14 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       return { started: true };
     });
   }
+
+  app.post("/api/docs", async (req) => {
+    localOnly(req);
+    const b = body<{ name?: string; version?: string; license?: string; homepage?: string; url?: string; format?: string }>(req);
+    const pack = clientError(() => addDocPack({ ...b, name: b.name ?? "" }));
+    audit("user", "docs.add", { pack: pack.id });
+    return { id: pack.id };
+  });
 
   app.post("/api/docs/:id/local", async (req) => {
     localOnly(req);

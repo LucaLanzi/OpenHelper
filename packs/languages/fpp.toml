@@ -1,0 +1,5 @@
+id = "fpp"
+name = "FPP"
+detect = ["**/*.fpp"]
+source_globs = ["**/*.fpp"]
+docs = ["fpp-spec"]

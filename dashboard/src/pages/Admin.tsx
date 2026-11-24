@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { get, post, setToken, type JobSummary, type LinksInfo, type DocPackInfo, type LanguageInfo } from "../api";
+import { del, get, post, setToken, type JobSummary, type LinksInfo, type DocPackInfo, type LanguageInfo } from "../api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Documentation } from "../components/Documentation";
 import { PathField } from "../components/PathField";
 import { Diff, Empty, ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
@@ -116,6 +117,20 @@ function Languages() {
   const [extensions, setExtensions] = useState("");
   const [test, setTest] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<LanguageInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const remove = async (l: LanguageInfo) => {
+    setBusy(true);
+    try {
+      await del(`/languages/${l.id}`);
+      toast(`Removed ${l.name}`);
+      languages.reload();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+    setBusy(false);
+    setRemoving(null);
+  };
   const add = async () => {
     setError(null);
     try {
@@ -134,7 +149,8 @@ function Languages() {
       <h2>Languages</h2>
       <p className="muted">A language pack detects source files and defines code checks. Documentation packs provide reference text for search.</p>
       <ErrorNote error={languages.error}/>
-      <div className="doc-grid">{languages.data?.map(l=><details className="panel" key={l.id}><summary>{l.name} · {l.details.length} checks</summary><p>Detects: {l.detect.join(", ")}</p><p>Checks run {l.sandbox === "none" ? "directly on this machine when manually requested; auto-run is disabled" : `inside ${l.sandbox} with network disabled`}. A project's execution platform chooses its sandbox.</p><ul>{l.details.map(c=><li key={c.id}><strong>{c.name}</strong> ({c.kind}) · requires {c.requires.join(", ") || "no additional tools"}{c.when_files.length ? `; applies when ${c.when_files.join(", ")} exists` : ""}</li>)}</ul><p>Missing tools cause checks to be skipped and prevent a fully Checked result. Exit code 77 means a check does not apply.</p><p className="small">Example: add a repository containing {l.detect[0]}, enable {l.name} during setup, then choose Run checks in its project panel.</p></details>)}</div>
+      <div className="doc-grid">{languages.data?.map(l=><details className="panel" key={l.id}><summary>{l.name} · {l.details.length} checks</summary><p>Detects: {l.detect.join(", ")}</p><p>Checks run {l.sandbox === "none" ? "directly on this machine when manually requested; auto-run is disabled" : `inside ${l.sandbox} with network disabled`}. A project's execution platform chooses its sandbox.</p><ul>{l.details.map(c=><li key={c.id}><strong>{c.name}</strong> ({c.kind}) · requires {c.requires.join(", ") || "no additional tools"}{c.when_files.length ? `; applies when ${c.when_files.join(", ")} exists` : ""}</li>)}</ul><p>Missing tools cause checks to be skipped and prevent a fully Checked result. Exit code 77 means a check does not apply.</p><p className="small">Example: add a repository containing {l.detect[0]}, enable {l.name} during setup, then choose Run checks in its project panel.</p>{l.custom && <button className="danger" onClick={()=>setRemoving(l)}>Remove {l.name}</button>}</details>)}</div>
+      {removing && <ConfirmDialog title={`Remove ${removing.name}?`} label="Remove language" busy={busy} onCancel={()=>setRemoving(null)} onConfirm={()=>void remove(removing)}><p>This deletes the {removing.name} language pack and its checks from this machine. Projects that use it must drop it first.</p></ConfirmDialog>}
       <div className="panel stack-s">
         <h3>Add a language</h3>
         <div className="row">
@@ -177,9 +193,9 @@ function AddLocalDocs({ id, homepage }: { id: string; homepage: string }) {
   };
   return (
     <div className="stack-s" style={{ minWidth: 240 }}>
-      <span className="small">
+      {homepage && <span className="small">
         Download from <a href={homepage}>{homepage.replace(/^https?:\/\//, "")}</a>, then add it here.
-      </span>
+      </span>}
       <PathField label="File or folder" kind="file" value={path} onChange={setPath} placeholder="~/Downloads/docs.zip" />
       <div>
         <button onClick={() => void add()} disabled={!path.trim()}>
@@ -187,6 +203,58 @@ function AddLocalDocs({ id, homepage }: { id: string; homepage: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function AddDocPack({ onAdded }: { onAdded: () => void }) {
+  const toast = useToast();
+  const empty = { name: "", version: "", license: "", homepage: "", url: "", format: "tar" };
+  const [f, setF] = useState(empty);
+  const [error, setError] = useState<string | null>(null);
+  const field = (k: keyof typeof empty, label: string, placeholder: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <input value={f[k]} placeholder={placeholder} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+    </label>
+  );
+  const add = async () => {
+    setError(null);
+    try {
+      await post("/docs", f);
+      toast(`Added ${f.name}. Download it or add a local copy below.`);
+      setF(empty);
+      onAdded();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="panel stack-s" aria-label="Add documentation">
+      <h3>Add documentation</h3>
+      <div className="row">
+        {field("name", "Name", "Rust standard library")}
+        {field("version", "Version", "1.82")}
+        {field("license", "License", "MIT")}
+        {field("homepage", "Homepage (optional)", "https://doc.rust-lang.org")}
+      </div>
+      <div className="row">
+        <label className="field" style={{ flex: 1, minWidth: 240 }}>
+          <span>Download link (optional)</span>
+          <input value={f.url} placeholder="https://example.org/docs.tar.gz" onChange={(e) => setF({ ...f, url: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Format</span>
+          <select value={f.format} onChange={(e) => setF({ ...f, format: e.target.value })}>
+            {["tar", "zip", "html", "markdown", "json", "text"].map((x) => <option key={x}>{x}</option>)}
+          </select>
+        </label>
+      </div>
+      <p className="small muted">Leave the link empty to add a local file or folder instead.</p>
+      <ErrorNote error={error} />
+      <div>
+        <button className="primary" disabled={!f.name.trim()} onClick={() => void add()}>Add documentation</button>
+      </div>
+    </section>
   );
 }
 
@@ -208,6 +276,7 @@ export function Library() {
       <ErrorNote error={docs.error} />
       <p className="notice">Documentation packs are versioned reference material shared by projects on this instance. Language packs detect code and run checks. Download a pack or add a local file/folder below, select it during project setup, then explicitly build the project's index. Adding or refreshing documentation requires an index rebuild; remote instances keep their own copies.</p>
       <Documentation packs={docs.data ?? []} actions={d=><div className="stack-s">{Boolean(d.sources.length || d.local_command) && <button onClick={()=>void fetchPack(d.id)}>{d.status.fetched ? "Download again" : "Download / collect documentation"}</button>}<details><summary>Add a local copy</summary><AddLocalDocs id={d.id} homepage={d.homepage}/></details></div>}/>
+      <AddDocPack onAdded={docs.reload} />
       <Languages />
     </>
   );

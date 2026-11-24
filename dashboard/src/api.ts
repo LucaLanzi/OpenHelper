@@ -237,7 +237,7 @@ export interface DocPackInfo {
   local_command: string; homepage: string; notes: string; status: { fetched: boolean; files: number };
 }
 export interface LanguageInfo {
-  id: string; name: string; detect: string[]; checks: string[]; sandbox: string;
+  id: string; name: string; detect: string[]; checks: string[]; sandbox: string; custom: boolean;
   details: { id: string; name: string; kind: string; requires: string[]; when_files: string[] }[];
 }
 export interface IndexEstimate {

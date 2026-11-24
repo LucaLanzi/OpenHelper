@@ -1,0 +1,12 @@
+id = "fpp-spec"
+name = "FPP language specification"
+version = "latest"
+license = "Apache-2.0"
+redistributable = true
+homepage = "https://nasa.github.io/fpp/fpp-spec.html"
+verified = false
+notes = "The full FPP (F Prime Prime) language specification, published as a single page. Pin a release once the spec is versioned."
+
+[[sources]]
+url = "https://nasa.github.io/fpp/fpp-spec.html"
+format = "html"

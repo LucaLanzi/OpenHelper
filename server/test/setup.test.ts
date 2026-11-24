@@ -167,12 +167,30 @@ describe("languages", () => {
     const r = (await post("/api/projects/rusty/detect")).json() as { languages: string[] };
     expect(r.languages).toEqual(expect.arrayContaining(["python", "rust"]));
     expect(findProject("rusty").languages).toContain("rust");
+    const remove = (id: string, payload: object = { confirm: true }) => a.app.inject({ method: "DELETE", url: `/api/languages/${id}`, headers: auth(), payload, remoteAddress: "127.0.0.1" });
+    expect((await remove("rust")).statusCode).toBe(400); // rusty uses it
+    expect((await remove("python")).statusCode).toBe(400); // built-in
+    expect((await post("/api/languages", { name: "Wrong", extensions: "wr" })).statusCode).toBe(200);
+    expect((await getJson<{ id: string; custom: boolean }[]>("/api/languages")).find((l) => l.id === "wrong")?.custom).toBe(true);
+    expect((await remove("wrong", {})).statusCode).toBe(400);
+    expect((await remove("wrong")).statusCode).toBe(200);
+    expect((await getJson<{ id: string }[]>("/api/languages")).some((l) => l.id === "wrong")).toBe(false);
+  });
+
+  it("adds a documentation pack with or without a download link", async () => {
+    expect((await post("/api/docs", { name: "Rust std", url: "http://x.org/a.tgz" })).statusCode).toBe(400);
+    expect((await post("/api/docs", { name: "Rust std", version: "1.82", url: "https://x.org/a.tar.gz" })).json()).toEqual({ id: "rust-std" });
+    expect((await post("/api/docs", { name: "Rust std" })).statusCode).toBe(400);
+    expect((await post("/api/docs", { name: "My notes" })).json()).toEqual({ id: "my-notes" });
+    const docs = await getJson<{ id: string; version: string; sources: unknown[] }[]>("/api/docs");
+    expect(docs.find((d) => d.id === "rust-std")).toMatchObject({ version: "1.82", sources: [{ url: "https://x.org/a.tar.gz", format: "tar" }] });
+    expect(docs.find((d) => d.id === "my-notes")?.sources).toEqual([]);
   });
 });
 
 describe("this machine only", () => {
   it("refuses every changing action from another device", async () => {
-    const urls = ["/api/models/add", "/api/models/qwen3-8b-q4km/download", "/api/models/qwen3-8b-q4km/use", "/api/models/qwen3-8b-q4km/bench", "/api/models/qwen3-8b-q4km/tune", "/api/languages", "/api/projects/demo/detect", "/api/system/restart", "/api/system/update"];
+    const urls = ["/api/models/add", "/api/models/qwen3-8b-q4km/download", "/api/models/qwen3-8b-q4km/use", "/api/models/qwen3-8b-q4km/bench", "/api/models/qwen3-8b-q4km/tune", "/api/languages", "/api/docs", "/api/projects/demo/detect", "/api/system/restart", "/api/system/update"];
     for (const url of urls) expect((await post(url, {}, "100.64.0.9")).statusCode, url).toBe(403);
     for (const type of ["model-download", "bench", "tune"]) expect((await post("/api/jobs", { type, project: "demo" })).statusCode).toBe(400);
   });
