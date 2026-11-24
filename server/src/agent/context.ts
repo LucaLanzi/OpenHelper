@@ -31,7 +31,7 @@ export async function retrieve(ctx: AgentContext, query: string, k = ctx.config.
   if (k <= 0) return [];
   const idx = openIndex(ctx.project.name);
   if (!idx) {
-    ctx.log("no index for this project yet; answering without retrieved context (run `make index`)");
+    ctx.log("no index for this project yet; answering without retrieved context (run `./openhelper index`)");
     return [];
   }
   let qv: number[] | undefined;

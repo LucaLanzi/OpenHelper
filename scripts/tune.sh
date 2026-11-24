@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make tune ID=<model id>
+# scripts/tune.sh <model id>
 # Sweeps --n-cpu-moe with llama-bench for an MoE model and prints prompt and generation speed.
 # Record the best value in your platform file under [model_overrides."<id>"] n_cpu_moe.
 
@@ -8,9 +8,9 @@
 
 id="${1:?usage: tune.sh MODEL_ID}"
 bench="$OH_ROOT/vendor/llama.cpp/build/bin/llama-bench"
-[ -x "$bench" ] || die "llama-bench not built; run make setup"
+[ -x "$bench" ] || die "llama-bench not built; run scripts/setup.sh"
 gguf="${MODEL_FILE:-$(oh models path "$id")}"
-[ -f "$gguf" ] || die "model file for $id not found at $gguf (download it with make download-model, or set MODEL_FILE)"
+[ -f "$gguf" ] || die "model file for $id not found at $gguf (download it with scripts/download-model.sh, or set MODEL_FILE)"
 
 layers="${LAYERS:-48}"
 echo "Sweeping --n-cpu-moe for $gguf (layers: $layers; set LAYERS to change)"

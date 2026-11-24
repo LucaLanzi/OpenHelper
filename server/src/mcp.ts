@@ -31,7 +31,7 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     run: async () => {
       const ps = loadProjects();
-      if (!ps.length) return "No projects yet. Add one with `make add-project REPO=path`.";
+      if (!ps.length) return "No projects yet. Add one with `./openhelper add-project path`.";
       return ps
         .map((p) => {
           const idx = openIndex(p.name);
@@ -58,7 +58,7 @@ export const TOOLS: Tool[] = [
     run: async (a) => {
       const project = String(a.project ?? "");
       const idx = openIndex(project);
-      if (!idx) return `Project "${project}" is not indexed. Run \`make index PROJECT=${project}\`.`;
+      if (!idx) return `Project "${project}" is not indexed. Run \`./openhelper index ${project}\`.`;
       const scope = String(a.scope ?? "all");
       const k = Math.min(20, Math.max(1, Number(a.k ?? 6)));
       const hits = idx.search(String(a.query ?? ""), k, undefined, (c) =>
@@ -88,7 +88,7 @@ export const TOOLS: Tool[] = [
       const platform = loadPlatforms().find((p) => p.name === cfg.self);
       if (!platform) return `No platform file for "${cfg.self}".`;
       if (platform.sandbox.driver === "none" && process.env.OPENHELPER_MCP_ALLOW_HOST !== "1") {
-        return "Refused: checks run the project's code, and this machine has no sandbox. Run `make sandbox-vm`, or set OPENHELPER_MCP_ALLOW_HOST=1 in the editor's MCP settings to allow running checks directly on this machine.";
+        return "Refused: checks run the project's code, and this machine has no sandbox. Run `scripts/sandbox-vm.sh`, or set OPENHELPER_MCP_ALLOW_HOST=1 in the editor's MCP settings to allow running checks directly on this machine.";
       }
       const dir = resolve(String(a.path ?? "."));
       const kinds = Array.isArray(a.kinds) ? (a.kinds as string[]).filter((k): k is CheckKind => KINDS.includes(k as CheckKind)) : undefined;

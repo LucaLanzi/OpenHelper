@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make setup PROFILE=auto|desktop|mac|cpu
+# scripts/setup.sh auto|desktop|mac|cpu
 #
 # Builds the pinned llama.cpp for this machine's backend, installs llama-swap and the
 # engine, creates the workspace and prints the plan. It never downloads a model without
@@ -31,13 +31,13 @@ else
     have c++ || missing+=("c++ (build-essential)")
 fi
 if [ "${#missing[@]}" -gt 0 ]; then
-    die "missing: ${missing[*]}. Run \`make prereqs\` (or \`make install\`, which does it all)."
+    die "missing: ${missing[*]}. Run \`scripts/install-prereqs.sh\` (or \`./openhelper install\`, which does it all)."
 fi
 node_major="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$node_major" -ge "$(lock_get NODE_MAJOR)" ] || die "Node.js $(lock_get NODE_MAJOR)+ required (found $(node -v)); run \`make prereqs\`"
+[ "$node_major" -ge "$(lock_get NODE_MAJOR)" ] || die "Node.js $(lock_get NODE_MAJOR)+ required (found $(node -v)); run \`scripts/install-prereqs.sh\`"
 
 if [ "$PROFILE" = "desktop" ]; then
-    have nvcc || [ -x /usr/local/cuda/bin/nvcc ] || die "CUDA toolkit not found (nvcc). Run \`make prereqs\`, or use PROFILE=cpu."
+    have nvcc || [ -x /usr/local/cuda/bin/nvcc ] || die "CUDA toolkit not found (nvcc). Run \`scripts/install-prereqs.sh\`, or use PROFILE=cpu."
     export PATH="/usr/local/cuda/bin:$PATH"
 fi
 
@@ -51,7 +51,7 @@ fi
 git -C "$LLAMA_DIR" fetch --tags --quiet
 if [ "$ref" = "pending" ]; then
     ref="$(newest_release_tag "$LLAMA_DIR")"
-    warn "versions.lock has no llama.cpp pin yet; using newest tag $ref (run \`make pin\` after verifying)"
+    warn "versions.lock has no llama.cpp pin yet; using newest tag $ref (run \`scripts/pin.sh\` after verifying)"
 fi
 git -C "$LLAMA_DIR" checkout --quiet "$ref"
 record LLAMA_CPP_REF "$(git -C "$LLAMA_DIR" rev-parse HEAD)"
@@ -114,4 +114,4 @@ fi
 
 log "plan for this machine:"
 oh plan
-log "finish in the dashboard: make install-service, then make open"
+log "finish in the dashboard: scripts/install-service.sh, then ./openhelper open"

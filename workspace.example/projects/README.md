@@ -1,6 +1,6 @@
 Projects live here, one TOML file each. Create them with:
 
-    make add-project REPO=~/code/my-repo
+    ./openhelper add-project ~/code/my-repo
 
 Example:
 

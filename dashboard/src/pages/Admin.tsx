@@ -120,6 +120,58 @@ interface DocPackInfo {
   status: { fetched: boolean; files: number };
 }
 
+function Languages() {
+  const toast = useToast();
+  const languages = useLoad(() => get<{ id: string; name: string; detect: string[]; checks: string[] }[]>("/languages"));
+  const [name, setName] = useState("");
+  const [extensions, setExtensions] = useState("");
+  const [test, setTest] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = async () => {
+    setError(null);
+    try {
+      await post("/languages", { name, extensions, test });
+      toast(`Added ${name}. Press Detect languages on your project.`);
+      setName("");
+      setExtensions("");
+      setTest("");
+      languages.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="section stack-s" aria-label="Languages">
+      <h2>Languages</h2>
+      <p className="muted">{languages.data?.map((l) => l.name).join(", ")}</p>
+      <div className="panel stack-s">
+        <h3>Add a language</h3>
+        <div className="row">
+          <label className="field">
+            <span>Name</span>
+            <input value={name} placeholder="Rust" onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>File extensions</span>
+            <input value={extensions} placeholder="rs" onChange={(e) => setExtensions(e.target.value)} />
+          </label>
+          <label className="field" style={{ flex: 1, minWidth: 200 }}>
+            <span>Test command (optional)</span>
+            <input value={test} placeholder="cargo test --offline" onChange={(e) => setTest(e.target.value)} />
+          </label>
+        </div>
+        <p className="small muted">Tests run in the sandbox with no network. If its tool isn't in the sandbox yet, the check shows as skipped.</p>
+        <ErrorNote error={error} />
+        <div>
+          <button className="primary" disabled={!name.trim() || !extensions.trim()} onClick={() => void add()}>
+            Add language
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AddLocalDocs({ id, homepage }: { id: string; homepage: string }) {
   const toast = useToast();
   const [path, setPath] = useState("");
@@ -195,6 +247,7 @@ export function Library() {
           </tbody>
         </table>
       </div>
+      <Languages />
     </>
   );
 }
@@ -385,7 +438,7 @@ export function Login({ onDone }: { onDone: () => void }) {
       onDone();
     } catch {
       setToken("");
-      setError("That token wasn't accepted. Print the right one on the machine with `make token`.");
+      setError("That token wasn't accepted. Get it from the System page on this machine, or run ./openhelper token.");
     }
   };
   return (
@@ -398,7 +451,7 @@ export function Login({ onDone }: { onDone: () => void }) {
         }}
       >
         <h1>OpenHelper</h1>
-        <p className="muted">Paste this machine's API token. On the machine, run <code>make token</code>. It stays in this browser only.</p>
+        <p className="muted">Paste this machine's API token. On the machine, run <code>./openhelper open</code> to sign in without one, or <code>./openhelper token</code> to print it. It stays in this browser only.</p>
         <label className="field">
           <span>API token</span>
           <input type="password" autoComplete="current-password" value={t} onChange={(e) => setT(e.target.value)} autoFocus />

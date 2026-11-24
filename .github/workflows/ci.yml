@@ -27,4 +27,4 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: shellcheck -x scripts/*.sh packs/languages/scripts/*.sh
+      - run: shellcheck -x openhelper scripts/*.sh packs/languages/scripts/*.sh

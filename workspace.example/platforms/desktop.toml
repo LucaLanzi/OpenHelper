@@ -5,7 +5,7 @@ url = "http://127.0.0.1:8740"
 os = "linux"
 token_ref = "desktop"
 agents = ["planner", "coder", "reviewer", "explainer"]
-# Generated code runs automatically only inside a sandbox. Build it with `make sandbox-image`.
+# Generated code runs automatically only inside a sandbox. Build it with `scripts/sandbox-vm.sh`.
 auto_run = false
 
 [model]
@@ -14,7 +14,7 @@ light = "qwen3-8b-q4km"
 embed = ""
 allowed = ["qwen3.6-35b-a3b-q4km", "qwen3-8b-q4km", "gemma-4-26b-a4b-q4km"]
 
-# Per-model llama-server settings for this machine. `make tune` measures n_cpu_moe.
+# Per-model llama-server settings for this machine. `scripts/tune.sh` measures n_cpu_moe.
 [model_overrides."qwen3.6-35b-a3b-q4km"]
 ctx = 32768
 extra_args = []

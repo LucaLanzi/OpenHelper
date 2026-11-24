@@ -118,7 +118,7 @@ export async function limaPower(vm: string, on: boolean): Promise<void> {
 }
 
 /**
- * macOS: a Lima VM with containerd. `make sandbox-vm` creates Lima's default VM, whose containerd
+ * macOS: a Lima VM with containerd. `scripts/sandbox-vm.sh` creates Lima's default VM, whose containerd
  * runs rootless (plain `nerdctl`); a VM set up with system containerd needs `sudo nerdctl`.
  * Which one this VM has is detected once. The worktree must be under a writable Lima mount.
  * A stopped VM is started when a job first needs it.

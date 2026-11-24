@@ -1,5 +1,5 @@
 # Sandbox image for running generated code: the toolchains the language packs check with.
-# Built locally with `make sandbox-image`. Containers run with --network none.
+# Built locally with `scripts/sandbox-vm.sh`. Containers run with --network none.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive

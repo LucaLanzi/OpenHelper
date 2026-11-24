@@ -13,11 +13,11 @@ license = "apache-2.0 (reported; confirm on the model card before pinning)"
 min_usable_gb = 25
 ctx_default = 32768
 tokenizer = "qwen3.6"
-# Experts on the CPU; sweep --n-cpu-moe with `make tune` and record the best value per platform.
+# Experts on the CPU; sweep --n-cpu-moe with `scripts/tune.sh` and record the best value per platform.
 server_args = ["--jinja", "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]
 verified = false
 sha256 = ""
-notes = "Pin source and sha256 with `make download-model` after the Phase 0 bake-off."
+notes = "Pin source and sha256 with `scripts/download-model.sh` after the Phase 0 bake-off."
 
 [source]
 hf_repo = ""

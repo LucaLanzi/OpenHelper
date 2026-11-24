@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
@@ -8,10 +9,12 @@ import { assess, countValidCitations } from "./core/confidence.js";
 import { listFiles, readText, writeFileAtomic } from "./core/fsutil.js";
 import { canSend, matrix, withinBudget } from "./core/links.js";
 import {
+  findModel,
   findProject,
   loadConfig,
   loadDocPacks,
   loadFile,
+  loadLanguages,
   loadLinks,
   loadPlatforms,
   loadProjects,
@@ -19,7 +22,7 @@ import {
   loadWorkflows,
 } from "./core/load.js";
 import { repoRoot, ws } from "./core/paths.js";
-import { LinksFile, Platform, Project, WorkflowDef, WorkspaceConfig } from "./core/schemas.js";
+import { LinksFile, ModelRole, Platform, Project, WorkflowDef, WorkspaceConfig } from "./core/schemas.js";
 import { apiToken } from "./core/secrets.js";
 import { apply, history, readConfigFile, restore, stage } from "./core/staging.js";
 import { render, safeEqual } from "./core/util.js";
@@ -28,10 +31,11 @@ import { expandHome, openIndex } from "./index/build.js";
 import { docStatus } from "./index/docs.js";
 import type { Job, JobType } from "./jobs/queue.js";
 import { loadTasks } from "./miner/mine.js";
+import { addLanguagePack, addModelPack, redetected } from "./packs.js";
 import { addProject, pickPath } from "./projects.js";
 import { Runtime } from "./runtime.js";
 import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
-import { redeemLoginCode } from "./setup.js";
+import { redeemLoginCode, runDetached } from "./setup.js";
 import { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
 
@@ -219,6 +223,120 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     rt.queue.start(job.id);
     return { project, job };
   });
+
+  // --- models ------------------------------------------------------------------------------
+  const paramId = (req: FastifyRequest) => (req.params as { id: string }).id;
+  const startJob = (type: JobType, input: Record<string, unknown>) => {
+    const job = rt.queue.create({ type, project: "", platform: rt.platform.name, model: "", input });
+    rt.queue.start(job.id);
+    return job;
+  };
+  const clientError = <T>(fn: () => T): T => {
+    try {
+      return fn();
+    } catch (e) {
+      bad((e as Error).message);
+    }
+  };
+
+  app.get("/api/models/all", async () => rt.modelsOverview());
+
+  app.post("/api/models/add", async (req) => {
+    localOnly(req);
+    const b = body<{ url?: string; name?: string; size_gb?: number; role?: string; license?: string }>(req);
+    const role = ModelRole.safeParse(b.role ?? "main");
+    if (!role.success) bad("role must be main, light, reviewer, draft or embed");
+    const pack = clientError(() => addModelPack({ url: b.url ?? "", size_gb: Number(b.size_gb), role: role.data, ...(b.name ? { name: b.name } : {}), ...(b.license ? { license: b.license } : {}) }));
+    audit("user", "model.add", { model: pack.id });
+    return { id: pack.id };
+  });
+
+  app.post("/api/models/:id/download", async (req) => {
+    localOnly(req);
+    const m = clientError(() => findModel(paramId(req)));
+    const url = body<{ url?: string }>(req).url?.trim();
+    if (url && !url.startsWith("https://")) bad("the link must start with https://");
+    if (!url && !m.source.url && !(m.source.hf_repo && m.source.filename)) bad("paste a link to the .gguf file");
+    audit("user", "model.download", { model: m.id });
+    return startJob("model-download", { id: m.id, ...(url ? { url } : {}) });
+  });
+
+  app.post("/api/models/:id/use", async (req) => {
+    localOnly(req);
+    const role = body<{ role?: string }>(req).role;
+    if (role !== "main" && role !== "light" && role !== "embed") bad("role must be main, light or embed");
+    try {
+      await rt.useModel(paramId(req), role);
+    } catch (e) {
+      bad((e as Error).message);
+    }
+    audit("user", "model.use", { model: paramId(req), role });
+    return { ok: true };
+  });
+
+  for (const type of ["bench", "tune"] as const) {
+    app.post(`/api/models/:id/${type}`, async (req) => {
+      localOnly(req);
+      const info = rt.modelsOverview().find((m) => m.id === paramId(req));
+      if (!info?.present) bad("download the model first");
+      if (type === "tune" && !info.can_tune) bad("tuning is for MoE models on an NVIDIA GPU");
+      return startJob(type, { id: info.id });
+    });
+  }
+
+  // --- languages ---------------------------------------------------------------------------
+  app.get("/api/languages", async () =>
+    loadLanguages().map((l) => ({ id: l.id, name: l.name, detect: l.detect, checks: l.checks.map((c) => c.name) })),
+  );
+
+  // A language's test command runs on this machine when no sandbox is set up.
+  app.post("/api/languages", async (req) => {
+    localOnly(req);
+    const b = body<{ name?: string; extensions?: string; test?: string }>(req);
+    const pack = clientError(() => addLanguagePack({ name: b.name ?? "", extensions: b.extensions ?? "", ...(b.test ? { test: b.test } : {}) }));
+    audit("user", "language.add", { language: pack.id });
+    return { id: pack.id };
+  });
+
+  app.post("/api/projects/:id/detect", async (req) => {
+    localOnly(req);
+    const project = clientError(() => findProject(paramId(req)));
+    const rel = `projects/${project.name}.toml`;
+    const staged = stage(rel, redetected(project), (f) => void loadFile(Project, f));
+    if (!staged.valid) bad(staged.error ?? "could not update the project");
+    const applied = await apply(rel, async () => true);
+    if (!applied.applied) bad(applied.error ?? "could not update the project");
+    audit("user", "project.detect", { project: project.name });
+    return { languages: findProject(project.name).languages, docs: findProject(project.name).docs };
+  });
+
+  // --- this machine ------------------------------------------------------------------------
+  app.get("/api/system", async () => {
+    const logFile = join(ws.root(), "logs", "system.log");
+    const git = (...args: string[]) => {
+      try {
+        return execFileSync("git", args, { cwd: repoRoot(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      } catch {
+        return "";
+      }
+    };
+    return {
+      version: VERSION,
+      commit: git("rev-parse", "--short", "HEAD"),
+      branch: git("branch", "--show-current"),
+      log: existsSync(logFile) ? readFileSync(logFile, "utf8").split("\n").slice(-12).join("\n").trim() : "",
+    };
+  });
+
+  for (const [action, script] of [["restart", "restart.sh"], ["update", "update.sh"]] as const) {
+    app.post(`/api/system/${action}`, async (req) => {
+      localOnly(req);
+      if (rt.queue.state().running) throw new HttpError(409, "a job is running; try again after it finishes");
+      audit("user", `system.${action}`);
+      runDetached(script);
+      return { started: true };
+    });
+  }
 
   app.post("/api/docs/:id/local", async (req) => {
     localOnly(req);

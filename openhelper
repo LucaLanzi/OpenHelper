@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ./openhelper install sets up this machine and opens the dashboard, where everything else lives.
+# ./openhelper open reopens it. ./openhelper token prints the sign-in token for another device.
+# Other commands go to the engine's CLI (./openhelper help). ./openhelper check is for developers.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+cd "$root"
+
+use_node() {
+    local dir
+    dir="$(scripts/find-node.sh)" || { echo "Node.js not found; run ./openhelper install" >&2; exit 1; }
+    PATH="$dir:$PATH"
+}
+
+case "${1:-help}" in
+    install)
+        scripts/install-prereqs.sh
+        scripts/setup.sh "${PROFILE:-auto}"
+        scripts/install-service.sh
+        use_node
+        exec node server/dist/cli.js open
+        ;;
+    check)
+        use_node
+        npm run typecheck
+        npm test
+        shellcheck -x openhelper scripts/*.sh packs/languages/scripts/*.sh
+        ;;
+    *)
+        use_node
+        [ -f server/dist/cli.js ] || { echo "not built yet; run ./openhelper install" >&2; exit 1; }
+        exec node server/dist/cli.js "$@"
+        ;;
+esac

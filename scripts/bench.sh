@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make bench MODEL_FILE=/path/to/model.gguf [ARGS="--n-cpu-moe 20"]
+# MODEL_FILE=/path/to/model.gguf scripts/bench.sh [ARGS="--n-cpu-moe 20"]
 # Prompt processing and generation speed for one model, saved under workspace/results.
 
 # shellcheck source=scripts/lib.sh
@@ -7,7 +7,7 @@
 
 gguf="${MODEL_FILE:?set MODEL_FILE=/path/to/model.gguf}"
 bench="$OH_ROOT/vendor/llama.cpp/build/bin/llama-bench"
-[ -x "$bench" ] || die "llama-bench not built; run make setup"
+[ -x "$bench" ] || die "llama-bench not built; run scripts/setup.sh"
 out="$OH_WS/results/bench-$(basename "$gguf" .gguf)-$(date +%Y%m%d-%H%M%S).md"
 mkdir -p "$(dirname "$out")"
 # shellcheck disable=SC2086

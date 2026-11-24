@@ -6,7 +6,7 @@ import { runChecks } from "./checks/runner.js";
 import { audit } from "./core/audit.js";
 import { readJson, writeFileAtomic } from "./core/fsutil.js";
 import { createWorktree, headSha, removeWorktree } from "./core/git.js";
-import { findProject, loadConfig, loadDocPacks, loadFile, loadLanguages, loadModels, loadPlatforms, loadProjects } from "./core/load.js";
+import { findModel, findProject, loadConfig, loadDocPacks, loadFile, loadLanguages, loadModels, loadPlatforms, loadProjects } from "./core/load.js";
 import { repoRoot, ws } from "./core/paths.js";
 import { Platform as PlatformSchema } from "./core/schemas.js";
 import type { CheckKind, Platform, WorkspaceConfig } from "./core/schemas.js";
@@ -114,6 +114,29 @@ export class Runtime {
       log("models are ready");
       return { models: [...STARTER_MODELS] };
     }
+    if (job.type === "model-download") {
+      const id = String(job.input.id);
+      const url = typeof job.input.url === "string" ? job.input.url : "";
+      await runScript("download-model.sh", url ? [id, url] : [id], { OH_YES: "1" }, log, signal);
+      this.writeSwapConfig();
+      return { id };
+    }
+    if (job.type === "bench") {
+      const id = String(job.input.id);
+      await this.llm.unloadAll();
+      const table: string[] = [];
+      const keep = (line: string) => {
+        if (line.startsWith("|")) table.push(line);
+        log(line);
+      };
+      await runScript("bench.sh", [], { MODEL_FILE: modelFile(findModel(id)) }, keep, signal);
+      return { id, table };
+    }
+    if (job.type === "tune") {
+      await this.llm.unloadAll();
+      await runScript("tune.sh", [String(job.input.id)], {}, log, signal);
+      return { id: String(job.input.id) };
+    }
     if (job.type === "setup-sandbox") {
       await runScript("sandbox-vm.sh", [], { YES: "1" }, log, signal);
       this.reload();
@@ -196,15 +219,25 @@ export class Runtime {
 
   /** Points this machine at the starter models, keeping any role whose model is already here. */
   private async useStarterModels(): Promise<void> {
-    const rel = `platforms/${this.platform.name}.toml`;
     const [main, embed] = STARTER_MODELS;
+    await this.setModelRoles({
+      ...(this.hasModel(this.platform.model.current) ? {} : { current: main }),
+      ...(this.hasModel(this.platform.model.light) ? {} : { light: main }),
+      ...(this.hasModel(this.platform.model.embed) ? {} : { embed }),
+    });
+  }
+
+  /** Writes which model does which job to the platform file, keeping a backup. */
+  private async setModelRoles(roles: Partial<Record<"current" | "light" | "embed", string>>): Promise<void> {
+    const rel = `platforms/${this.platform.name}.toml`;
     let text = readConfigFile(rel);
-    const set = (key: string, value: string) => {
-      text = text.replace(new RegExp(`^${key}\\s*=.*$`, "m"), `${key} = "${value}"`);
-    };
-    if (!this.hasModel(this.platform.model.current)) set("current", main);
-    if (!this.hasModel(this.platform.model.light)) set("light", main);
-    if (!this.hasModel(this.platform.model.embed)) set("embed", embed);
+    for (const [key, id] of Object.entries(roles)) {
+      text = text.replace(new RegExp(`^${key}\\s*=.*$`, "m"), `${key} = "${id}"`);
+      // An empty list means every model is offered.
+      if (key !== "embed" && this.platform.model.allowed.length && !this.platform.model.allowed.includes(id)) {
+        text = text.replace(/^allowed\s*=\s*\[/m, `allowed = ["${id}", `);
+      }
+    }
     const staged = stage(rel, text, (f) => void loadFile(PlatformSchema, f));
     if (!staged.valid) throw new Error(`could not update ${rel}: ${staged.error}`);
     const applied = await apply(rel, async () => {
@@ -212,9 +245,41 @@ export class Runtime {
       return true;
     });
     if (!applied.applied) throw new Error(`could not update ${rel}: ${applied.error}`);
-    // llama-swap watches this file and reloads it.
+    this.writeSwapConfig();
+  }
+
+  /** llama-swap watches this file and reloads it. */
+  private writeSwapConfig(): void {
     const server = join(repoRoot(), "vendor", "llama.cpp", "build", "bin", "llama-server");
     writeFileAtomic(join(ws.root(), "llama-swap.yaml"), llamaSwapConfig(this.platform, loadModels(), server));
+  }
+
+  /** Gives a downloaded model a job: main, light, or search embeddings. */
+  async useModel(id: string, role: "main" | "light" | "embed"): Promise<void> {
+    if (!this.hasModel(id)) throw new Error(`${id} is not downloaded yet`);
+    const m = findModel(id);
+    if ((role === "embed") !== m.roles.includes("embed")) throw new Error(role === "embed" ? `${id} is not an embedding model` : `${id} is an embedding model`);
+    await this.setModelRoles({ [role === "main" ? "current" : role]: id });
+    if (role === "main") await this.swapModel(id);
+  }
+
+  modelsOverview() {
+    const { light, embed } = this.platform.model;
+    const hw = readJson<{ gpu?: { vendor?: string } }>(ws.hw(), {});
+    return loadModels().map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: m.kind,
+      quant: m.quant,
+      size_gb: m.size_gb,
+      roles: m.roles,
+      license: m.license,
+      present: this.hasModel(m.id),
+      pinned: Boolean(m.sha256),
+      has_source: Boolean(m.source.url || (m.source.hf_repo && m.source.filename)),
+      uses: [...(m.id === this.currentModel ? ["main"] : []), ...(m.id === light ? ["light"] : []), ...(m.id === embed ? ["embed"] : [])],
+      can_tune: m.kind === "moe" && hw.gpu?.vendor === "nvidia",
+    }));
   }
 
   async setupStatus() {

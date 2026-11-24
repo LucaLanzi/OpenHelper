@@ -5,10 +5,12 @@ import { AppProvider, useApp } from "./context";
 import { Audit, Library, Links, Login, NotFound, Settings } from "./pages/Admin";
 import { Ask } from "./pages/Ask";
 import { JobView, Jobs } from "./pages/Jobs";
+import { Models } from "./pages/Models";
 import { Platforms } from "./pages/Platforms";
 import { PlanView, Plans } from "./pages/Plans";
 import { Projects } from "./pages/Projects";
 import { Setup } from "./pages/Setup";
+import { System } from "./pages/System";
 import { RunView, Workflows } from "./pages/Workflows";
 import { go, href, useRoute } from "./router";
 
@@ -19,10 +21,12 @@ const NAV: { id: string; label: string; phone?: boolean }[] = [
   { id: "jobs", label: "Jobs", phone: true },
   { id: "plans", label: "Plans" },
   { id: "projects", label: "Projects" },
-  { id: "links", label: "Links" },
+  { id: "models", label: "Models" },
   { id: "library", label: "Library" },
+  { id: "links", label: "Links" },
   { id: "audit", label: "Audit log" },
   { id: "settings", label: "Settings" },
+  { id: "system", label: "System" },
   { id: "setup", label: "Setup" },
 ];
 
@@ -108,6 +112,10 @@ function Page({ route }: { route: string[] }) {
   switch (a) {
     case "setup":
       return <Setup />;
+    case "models":
+      return <Models />;
+    case "system":
+      return <System />;
     case "platforms":
       return <Platforms />;
     case "ask":

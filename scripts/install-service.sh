@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make install-service
+# scripts/install-service.sh
 # Installs two user services: llama-swap (model server, localhost only) and openhelper
 # (engine + dashboard). systemd --user on Linux, launchd on macOS.
 
@@ -7,8 +7,8 @@
 . "$(dirname "$0")/lib.sh"
 
 SWAP="$OH_ROOT/vendor/bin/llama-swap"
-[ -x "$SWAP" ] || die "llama-swap not installed; run make setup"
-[ -f "$OH_ROOT/server/dist/cli.js" ] || die "engine not built; run make build"
+[ -x "$SWAP" ] || die "llama-swap not installed; run scripts/setup.sh"
+[ -f "$OH_ROOT/server/dist/cli.js" ] || die "engine not built; run npm run build"
 [ -f "$OH_WS/llama-swap.yaml" ] || oh llama-swap-config
 NODE="$(command -v node)"
 port="$(sed -n 's/^llm_url *= *"http:\/\/127.0.0.1:\([0-9]*\)".*/\1/p' "$OH_WS/config.toml")"

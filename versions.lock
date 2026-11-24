@@ -1,5 +1,5 @@
 # Pinned versions of everything setup builds or downloads.
-# `make pin` records the exact commits after the first successful hardware run;
+# `scripts/pin.sh` records the exact commits after the first successful hardware run;
 # until then the refs below are what setup uses. Change them deliberately, never casually.
 
 # llama.cpp: tag (bNNNN) or commit. "pending" builds the newest release tag and records it.

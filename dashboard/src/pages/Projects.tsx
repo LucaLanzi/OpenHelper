@@ -90,6 +90,17 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
     }
   };
 
+  const detect = async () => {
+    setError(null);
+    try {
+      const r = await post<{ languages: string[] }>(`/projects/${name}/detect`);
+      toast(`Languages: ${r.languages.join(", ") || "none found"}`);
+      onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const latest = results.data?.[0];
   return (
     <section className="panel stack-s" aria-label={p.name}>
@@ -144,6 +155,9 @@ function ProjectPanel({ name, onChange, onUse }: { name: string; onChange: () =>
           Run eval
         </button>
         <button onClick={() => void run("check", "Checks")}>Run checks</button>
+        <button className="quiet" onClick={() => void detect()}>
+          Detect languages
+        </button>
       </div>
     </section>
   );

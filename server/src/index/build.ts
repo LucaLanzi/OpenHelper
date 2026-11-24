@@ -59,7 +59,7 @@ export async function buildIndex(project: Project, opts: BuildOptions = {}): Pro
     const dir = docTextDir(id);
     if (!pack || !existsSync(dir)) {
       const manual = pack && !pack.sources.length && !pack.local_command;
-      log(`doc pack ${id} not fetched yet; run \`${manual ? `make docs-add ID=${id} FILE=path` : `make docs-fetch ID=${id}`}\``);
+      log(`doc pack ${id} not fetched yet; ${manual ? "download it and add it" : "fetch it"} on the Library page`);
       continue;
     }
     const src = `doc:${id}`;

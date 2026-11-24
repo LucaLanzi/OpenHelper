@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# install-prereqs.sh — install everything OpenHelper needs on this machine (`make prereqs`;
-# `make install` runs this and then `make setup`).
+# install-prereqs.sh — install everything OpenHelper needs on this machine (`scripts/install-prereqs.sh`;
+# `./openhelper install` runs this and then `scripts/setup.sh`).
 #
 # Runs as your normal user and asks for sudo only for system packages. Idempotent: run it
 # again any time; anything already installed is left alone.
@@ -94,7 +94,7 @@ ensure_local_bin_on_path() {
     if grep -qs 'HOME/.local/bin' "$rc"; then return; fi
     if yesno "Add ~/.local/bin to your PATH in $rc?" y; then
         # shellcheck disable=SC2016  # written literally, expanded when the shell starts
-        printf '\n# Added by OpenHelper (make prereqs)\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$rc"
+        printf '\n# Added by OpenHelper (scripts/install-prereqs.sh)\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$rc"
         ok "added ~/.local/bin to PATH in $rc (open a new terminal, or: source $rc)"
     else
         warn "add ~/.local/bin to your PATH yourself"
@@ -133,7 +133,7 @@ prefer_on_path() {  # prefer_on_path <dir> <what>
         printf '\n# OpenHelper: %s\nexport PATH="%s:$PATH"\n' "$what" "$dir" >> "$rc"
         ok "$rc now puts $dir first (open a new terminal, or: source $rc)"
     else
-        warn "your default node stays the older one; OpenHelper's make targets still find $dir"
+        warn "your default node stays the older one; OpenHelper still finds $dir"
     fi
 }
 
@@ -231,7 +231,7 @@ linux() {
         fi
     elif lspci 2>/dev/null | grep -qi nvidia; then
         warn "an NVIDIA GPU is present but its driver is not working (nvidia-smi failed)."
-        warn "Install the driver first:  sudo ubuntu-drivers install  then reboot and run make prereqs again."
+        warn "Install the driver first:  sudo ubuntu-drivers install  then reboot and run scripts/install-prereqs.sh again."
         missing_after+=(nvidia-driver)
     else
         ok "no NVIDIA GPU: llama.cpp will build for the CPU"
@@ -246,12 +246,12 @@ linux() {
 
     b "5/5 Sandbox for running generated code (optional)"
     if have podman || have docker; then
-        ok "$(have podman && echo podman || echo docker): already installed; build the image with make sandbox-image"
+        ok "$(have podman && echo podman || echo docker): already installed; build the image with scripts/sandbox-vm.sh"
     elif [[ -n "${SKIP_SANDBOX:-}" ]]; then
         warn "no sandbox runtime (SKIP_SANDBOX=1); generated code will never run automatically"
     elif yesno "Install Podman so generated code can run in a sandbox with no network?" y; then
         apt_install "sandbox" podman
-        echo "  next: make sandbox-image, then set [sandbox] driver = \"podman\" in your platform file"
+        echo "  next: scripts/sandbox-vm.sh, then set [sandbox] driver = \"podman\" in your platform file"
     else
         warn "skipped; generated code will never run automatically"
     fi
@@ -294,7 +294,7 @@ macos() {
     if xcode-select -p >/dev/null 2>&1; then
         ok "Xcode Command Line Tools: installed"
     else
-        echo "  opening the installer for the Xcode Command Line Tools; finish it, then run make prereqs again"
+        echo "  opening the installer for the Xcode Command Line Tools; finish it, then run scripts/install-prereqs.sh again"
         xcode-select --install || true
         exit 1
     fi
@@ -306,7 +306,7 @@ macos() {
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"
         else
-            die "Homebrew is needed for the rest; install it from https://brew.sh and run make prereqs again"
+            die "Homebrew is needed for the rest; install it from https://brew.sh and run scripts/install-prereqs.sh again"
         fi
     fi
     brew_install "build tools" git cmake
@@ -356,7 +356,7 @@ esac
 echo
 if [[ ${#missing_after[@]} -gt 0 ]]; then
     b "Done, but still missing: ${missing_after[*]}"
-    echo "  make setup will tell you if any of these block it."
+    echo "  scripts/setup.sh will tell you if any of these block it."
 else
     b "All prerequisites are installed."
 fi

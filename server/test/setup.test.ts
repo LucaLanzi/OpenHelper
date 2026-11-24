@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, type App } from "../src/app.js";
 import { toToml } from "../src/core/fsutil.js";
@@ -119,5 +119,64 @@ describe("setup page", () => {
   it("can only be started from this machine, and not as a generic job", async () => {
     for (const url of ["/api/setup/model", "/api/setup/sandbox"]) expect((await post(url, {}, "100.64.0.9")).statusCode).toBe(403);
     for (const type of ["setup-model", "setup-sandbox"]) expect((await post("/api/jobs", { type, project: "x" })).statusCode).toBe(400);
+  });
+});
+
+describe("models page", () => {
+  it("adds a model from a GGUF link and refuses a bad one", async () => {
+    const add = (payload: object) => post("/api/models/add", payload);
+    expect((await add({ url: "http://example.com/a.gguf", size_gb: 1 })).statusCode).toBe(400);
+    expect((await add({ url: "https://example.com/a.bin", size_gb: 1 })).statusCode).toBe(400);
+    expect((await add({ url: "https://example.com/a.gguf", size_gb: 0 })).statusCode).toBe(400);
+    const r = await add({ url: "https://example.com/org/My-Model-Q4_K_M.gguf", size_gb: 2.5, role: "main", license: "MIT" });
+    expect(r.json()).toEqual({ id: "my-model-q4-k-m" });
+    expect((await add({ url: "https://example.com/org/My-Model-Q4_K_M.gguf", size_gb: 2.5 })).statusCode).toBe(400);
+    const m = (await getJson<{ id: string; quant: string; present: boolean; has_source: boolean; license: string }[]>("/api/models/all")).find((x) => x.id === "my-model-q4-k-m");
+    expect(m).toMatchObject({ quant: "Q4_K_M", present: false, has_source: true, license: "MIT" });
+  });
+
+  it("gives a job only to a downloaded model of the right kind", async () => {
+    const use = (id: string, role: string) => post(`/api/models/${id}/use`, { role });
+    expect((await use("my-model-q4-k-m", "main")).statusCode).toBe(400);
+    const file = modelFile(findModel("my-model-q4-k-m"));
+    write(dirname(file), basename(file), "stand-in");
+    expect((await use("my-model-q4-k-m", "embed")).statusCode).toBe(400);
+    expect((await use("my-model-q4-k-m", "nonsense")).statusCode).toBe(400);
+    expect((await use("my-model-q4-k-m", "main")).statusCode).toBe(200);
+    const m = (await getJson<{ id: string; uses: string[] }[]>("/api/models/all")).find((x) => x.id === "my-model-q4-k-m");
+    expect(m?.uses).toContain("main");
+    expect(readFileSync(join(wsDir, "platforms", "desktop.toml"), "utf8")).toMatch(/^current = "my-model-q4-k-m"$/m);
+    expect(readFileSync(join(wsDir, "llama-swap.yaml"), "utf8")).toContain("My-Model-Q4_K_M.gguf");
+  });
+
+  it("refuses a download link that isn't https", async () => {
+    expect((await post("/api/models/my-model-q4-k-m/download", { url: "file:///etc/hosts" })).statusCode).toBe(400);
+  });
+});
+
+describe("languages", () => {
+  it("adds a language and detects it in a project", async () => {
+    const repo = samplePythonRepo();
+    write(repo, "src/lib.rs", "pub fn one() -> i32 { 1 }\n");
+    write(wsDir, "projects/rusty.toml", `name = "rusty"\nrepos = ["${repo}"]\nlanguages = ["python"]\ndocs = []\n`);
+    expect((await post("/api/languages", { name: "Rust", extensions: "../x" })).statusCode).toBe(400);
+    expect((await post("/api/languages", { name: "Rust", extensions: ".rs, rlib", test: "cargo test --offline" })).json()).toEqual({ id: "rust" });
+    expect((await post("/api/languages", { name: "Rust", extensions: "rs" })).statusCode).toBe(400);
+    expect((await getJson<{ id: string; checks: string[] }[]>("/api/languages")).find((l) => l.id === "rust")?.checks).toEqual(["cargo test --offline"]);
+    const r = (await post("/api/projects/rusty/detect")).json() as { languages: string[] };
+    expect(r.languages).toEqual(expect.arrayContaining(["python", "rust"]));
+    expect(findProject("rusty").languages).toContain("rust");
+  });
+});
+
+describe("this machine only", () => {
+  it("refuses every changing action from another device", async () => {
+    const urls = ["/api/models/add", "/api/models/qwen3-8b-q4km/download", "/api/models/qwen3-8b-q4km/use", "/api/models/qwen3-8b-q4km/bench", "/api/models/qwen3-8b-q4km/tune", "/api/languages", "/api/projects/demo/detect", "/api/system/restart", "/api/system/update"];
+    for (const url of urls) expect((await post(url, {}, "100.64.0.9")).statusCode, url).toBe(403);
+    for (const type of ["model-download", "bench", "tune"]) expect((await post("/api/jobs", { type, project: "demo" })).statusCode).toBe(400);
+  });
+
+  it("reports the install", async () => {
+    expect(await getJson("/api/system")).toMatchObject({ version: "0.0.1" });
   });
 });

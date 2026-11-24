@@ -81,7 +81,7 @@ export function loadTemplate(name: string): string {
 
 export function loadConfig(): WorkspaceConfig {
   const f = ws.config();
-  if (!existsSync(f)) throw new ConfigError(f, "workspace not initialised; run `make init`");
+  if (!existsSync(f)) throw new ConfigError(f, "workspace not initialised; run `./openhelper install`");
   return loadFile(WorkspaceConfig, f);
 }
 

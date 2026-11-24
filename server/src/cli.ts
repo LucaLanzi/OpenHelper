@@ -109,7 +109,7 @@ async function main() {
         out(`created workspace at ${dest} for platform "${platform}"`);
       }
       ensureApiToken();
-      out("API token created in workspace/secrets/api-token (show it with `make token`).");
+      out("API token created in workspace/secrets/api-token (show it with `./openhelper token`).");
       return;
     }
 
@@ -120,7 +120,7 @@ async function main() {
     case "open": {
       const cfg = loadConfig();
       if (cfg.bind !== "127.0.0.1" && cfg.bind !== "localhost") {
-        out(`Open http://${cfg.bind}:${cfg.port} and sign in with the token from \`make token\`.`);
+        out(`Open http://${cfg.bind}:${cfg.port} and sign in with the token from \`./openhelper token\`.`);
         return;
       }
       const base = `http://127.0.0.1:${cfg.port}`;
@@ -209,7 +209,7 @@ async function main() {
       if (!path) throw new Error("usage: add-project PATH [--name NAME]");
       const { name, file, languages, docs } = addProject(path, str(a, "name"));
       out(`added project "${name}" (${file})\n  languages: ${languages.join(", ") || "none detected"}\n  doc packs: ${docs.join(", ") || "none"}`);
-      out("Next: `make docs-fetch ID=<pack>` for each doc pack, then `make index PROJECT=" + name + "`.");
+      out("Next: `./openhelper docs fetch <pack>` for each doc pack, then `./openhelper index PROJECT=" + name + "`.");
       return;
     }
 
@@ -218,7 +218,7 @@ async function main() {
       if (sub === "list") {
         for (const p of loadDocPacks()) {
           const s = docStatus(p);
-          out(`${p.id.padEnd(16)} ${s.fetched ? `${s.files} files` : "not fetched"}  ${p.local_command ? "(local)" : p.sources.length ? "" : "(manual: make docs-add)"}  ${p.license}`);
+          out(`${p.id.padEnd(16)} ${s.fetched ? `${s.files} files` : "not fetched"}  ${p.local_command ? "(local)" : p.sources.length ? "" : "(manual: add on the Library page)"}  ${p.license}`);
         }
         return;
       }
@@ -253,7 +253,7 @@ async function main() {
       const tasks = mineProject(project, loadLanguages(), { limit: Number(str(a, "limit", "100")) });
       const f = saveTasks(project.name, tasks);
       out(`mined ${tasks.length} candidate tasks into ${f}`);
-      out("Skim them, delete any that are not good tests of the model, then run `make eval`.");
+      out("Skim them, delete any that are not good tests of the model, then press Run eval on the Projects page.");
       return;
     }
 

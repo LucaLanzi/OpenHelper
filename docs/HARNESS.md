@@ -10,7 +10,7 @@ Two pieces:
   - `search`: your code and pinned docs, returned as labelled passages to cite.
   - `run_checks`: build, test and lint a directory in the sandbox, returning Checked, Partly checked or Failed checks.
 
-  `run_checks` refuses to run when the machine has no sandbox. Set one up with `make sandbox-vm`, or set `OPENHELPER_MCP_ALLOW_HOST=1` in the editor's MCP settings to allow it anyway.
+  `run_checks` refuses to run when the machine has no sandbox. Set one up with `scripts/sandbox-vm.sh`, or set `OPENHELPER_MCP_ALLOW_HOST=1` in the editor's MCP settings to allow it anyway.
 
 ## Continue (VS Code and the `cn` CLI)
 

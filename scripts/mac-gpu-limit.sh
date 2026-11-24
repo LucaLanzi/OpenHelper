@@ -13,7 +13,7 @@ target=$(( total_mb - 8192 ))
 
 echo "Unified memory: ${total_mb} MB; GPU wired limit: ${current} MB (0 means the macOS default, about two thirds)"
 if [ "${1:-}" = "--check" ]; then
-    [ "$current" -ge "$target" ] || echo "Run \`make mac-gpu-limit\` before loading models over ~20 GB."
+    [ "$current" -ge "$target" ] || echo "Run \`scripts/mac-gpu-limit.sh\` before loading models over ~20 GB."
     exit 0
 fi
 echo "Raising it to ${target} MB needs sudo and lasts until the next reboot."

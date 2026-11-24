@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, utimesSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -480,24 +480,6 @@ describe("setup scripts", () => {
     const out = execFileSync("bash", ["-c", '. "$1/scripts/lib.sh"; newest_release_tag "$2"', "_", REPO_ROOT, repo], { encoding: "utf8" });
     expect(out.trim()).toBe("b19999");
   });
-  it("make test does not reinstall dependencies that already exist", () => {
-    const dir = tempWorkspace();
-    for (const f of ["package.json", "server/package.json", "dashboard/package.json"]) write(dir, f, "{}");
-    mkdirSync(join(dir, "node_modules"));
-    utimesSync(join(dir, "node_modules"), new Date(0), new Date(0));
-    writeFileSync(join(dir, "Makefile"), readFileSync(join(REPO_ROOT, "Makefile")));
-    const out = execFileSync("make", ["-n", "test"], { cwd: dir, encoding: "utf8" });
-    expect(out).toContain("npm test");
-    expect(out).not.toContain("npm install");
-  });
-  it("make docs-add expands ~ and keeps a path with spaces together", () => {
-    const dir = tempWorkspace();
-    for (const f of ["package.json", "server/package.json", "dashboard/package.json"]) write(dir, f, "{}");
-    mkdirSync(join(dir, "node_modules"));
-    writeFileSync(join(dir, "Makefile"), readFileSync(join(REPO_ROOT, "Makefile")));
-    const out = execFileSync("make", ["-n", "docs-add", "ID=cppreference", "FILE=~/My Docs/book.zip"], { cwd: dir, encoding: "utf8", env: { ...process.env, HOME: "/home/me" } });
-    expect(out).toContain('docs add-local cppreference "/home/me/My Docs/book.zip"');
-  });
   it("picks the nerdctl that has the sandbox image", () => {
     const dir = tempWorkspace();
     // Plain `nerdctl info` always works; the image exists under sudo only when SUDO_IMAGE=0.
@@ -519,12 +501,12 @@ describe("doc packs", () => {
     expect(addLocalDocs("big", file)).toBe(1);
     expect(docStatus({ id: "big", sources: [] } as unknown as DocPack).fetched).toBe(true);
   });
-  it("names the right make command for a pack that has not been added", async () => {
+  it("says how to get a pack that has not been added", async () => {
     tempWorkspace();
     const lines: string[] = [];
     await buildIndex(ProjectSchema.parse({ name: "calc", repos: [samplePythonRepo()], docs: ["cppreference", "python-stdlib"] }), { log: (s) => lines.push(s) });
-    expect(lines.join("\n")).toContain("make docs-add ID=cppreference FILE=path");
-    expect(lines.join("\n")).toContain("make docs-fetch ID=python-stdlib");
+    expect(lines.join("\n")).toContain("doc pack cppreference not fetched yet; download it and add it on the Library page");
+    expect(lines.join("\n")).toContain("doc pack python-stdlib not fetched yet; fetch it on the Library page");
   });
 });
 

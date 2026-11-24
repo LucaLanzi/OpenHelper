@@ -4,7 +4,7 @@ This guide covers one machine, then adding a second, then reaching the dashboard
 
 ## Before you start
 
-`make install` installs everything in this table for you (Ubuntu/Debian with apt, or macOS with Homebrew), asking before each optional or large item. To install only the packages, run `make prereqs`. Options: `YES=1` (no questions), `SKIP_APT=1`, `SKIP_CUDA=1`, `SKIP_SANDBOX=1`.
+`./openhelper install` installs everything in this table for you (Ubuntu/Debian with apt, or macOS with Homebrew), asking before each optional or large item. To install only the packages, run `scripts/install-prereqs.sh`. Options: `YES=1` (no questions), `SKIP_APT=1`, `SKIP_CUDA=1`, `SKIP_SANDBOX=1`.
 
 | | Linux (desktop) | macOS (Apple Silicon) |
 | --- | --- | --- |
@@ -18,10 +18,10 @@ This guide covers one machine, then adding a second, then reaching the dashboard
 
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git && cd OpenHelper
-make install
+./openhelper install
 ```
 
-`make install` first installs the packages above (it never installs GPU drivers; if `nvidia-smi` fails it tells you to run `sudo ubuntu-drivers install`). Then it runs `make setup`, which picks a profile (`desktop` with an NVIDIA GPU, `mac` on Apple Silicon, `cpu` otherwise), builds llama.cpp and llama-swap, builds the engine, creates `workspace/` and prints a plan like:
+`./openhelper install` first installs the packages above (it never installs GPU drivers; if `nvidia-smi` fails it tells you to run `sudo ubuntu-drivers install`). Then it runs `scripts/setup.sh`, which picks a profile (`desktop` with an NVIDIA GPU, `mac` on Apple Silicon, `cpu` otherwise), builds llama.cpp and llama-swap, builds the engine, creates `workspace/` and prints a plan like:
 
 ```
 Usable model memory: 35 GB  →  tier M (reference baseline: 2080 Ti desktop, 32 GB M1 Mac)
@@ -32,13 +32,13 @@ Usable model memory: 35 GB  →  tier M (reference baseline: 2080 Ti desktop, 32
 Download: 43.7 GB   Disk needed (with 20% margin): 82 GB
 ```
 
-It then starts llama-swap and the engine as user services and opens the dashboard with a one-time sign-in link. The **Setup** page downloads Qwen3-8B and the embedding model, sets up the sandbox and adds your first repo. `make open` opens it again; from another device, sign in with `make token`.
+It then starts llama-swap and the engine as user services and opens the dashboard with a one-time sign-in link. The **Setup** page downloads Qwen3-8B and the embedding model, sets up the sandbox and adds your first repo. `./openhelper open` opens it again; from another device, sign in with `./openhelper token`.
 
 For a larger model than the Setup page offers:
 
 ```bash
-make download-model ID=qwen3.6-35b-a3b-q4km   # asks first; pins the file's SHA-256
-make tune ID=qwen3.6-35b-a3b-q4km             # NVIDIA + MoE only: find how many expert layers fit in VRAM
+scripts/download-model.sh qwen3.6-35b-a3b-q4km   # asks first; pins the file's SHA-256
+scripts/tune.sh qwen3.6-35b-a3b-q4km             # NVIDIA + MoE only: find how many expert layers fit in VRAM
 ```
 
 ### Memory tiers
@@ -57,29 +57,29 @@ Setup computes usable model memory, then picks the largest model in the registry
 | L | 40–80 GB | the same MoE at Q8, reviewer loaded alongside |
 | XL | 80 GB and up | a larger MoE from the registry |
 
-Override with `make plan TIER=S`. On machines that split a model between GPU and RAM, MoE models are preferred, because only their active experts are read for each token.
+Override with `./openhelper plan --tier S`. On machines that split a model between GPU and RAM, MoE models are preferred, because only their active experts are read for each token.
 
 ## Adding projects
 
 ```bash
-make add-project REPO=~/code/fprime-billee
-make docs-list
-make docs-fetch ID=cmake                       # repeat for each doc pack the project lists
-make docs-add ID=cppreference FILE=~/Downloads/html-book.zip   # packs you download by hand
-make index PROJECT=fprime-billee
-make mine-evals PROJECT=fprime-billee          # eval tasks from your git history
+./openhelper add-project ~/code/fprime-billee
+./openhelper docs list
+./openhelper docs fetch cmake                       # repeat for each doc pack the project lists
+./openhelper docs add-local cppreference ~/Downloads/html-book.zip   # packs you download by hand
+./openhelper index fprime-billee
+./openhelper mine-evals fprime-billee          # eval tasks from your git history
 ```
 
 Then choose **Run the eval** on the dashboard's Jobs page.
 
 ## A second machine
 
-On the second machine, run the same `make setup`. Then, so both machines know about each other:
+On the second machine, run the same `scripts/setup.sh`. Then, so both machines know about each other:
 
 1. Copy the other machine's platform file into each workspace (`workspace/platforms/`), and set its `url` to the address the other machine can reach, for example its Tailscale name.
 2. Put each other machine's token in `workspace/secrets/peers.toml` on the machine that runs the dashboard:
    ```toml
-   mac = "<output of make token on the Mac>"
+   mac = "<output of ./openhelper token on the Mac>"
    ```
 3. Keep `projects/` and `links.toml` the same on both machines (a private git repo of your workspace config works well; never include `secrets/`).
 4. Point the workflow aliases in `config.toml` at the machines: `plan = "mac"`, `build = "desktop"`.
@@ -98,7 +98,7 @@ If Tailscale's coordination service is down, devices that are already connected 
 ## Updating
 
 ```bash
-git pull && make build && systemctl --user restart openhelper   # or relaunch the launchd agent on macOS
+git pull && npm run build && systemctl --user restart openhelper   # or relaunch the launchd agent on macOS
 ```
 
-Pinned versions in `versions.lock` only change when you change them. After a successful run on new versions, `make pin` records exactly what was built.
+Pinned versions in `versions.lock` only change when you change them. After a successful run on new versions, `scripts/pin.sh` records exactly what was built.

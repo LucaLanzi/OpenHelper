@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, rmSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, openSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { ensureDir, readJson, writeFileAtomic } from "./core/fsutil.js";
@@ -12,7 +12,7 @@ export const STARTER_MODELS = ["qwen3-8b-q4km", "qwen3-embedding-0.6b-q8"] as co
 const codeFile = () => join(ws.secrets(), "login-code");
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-/** A single-use code for the link `make install` opens, so the first login needs no pasted token. */
+/** A single-use code for the link `./openhelper install` opens, so the first login needs no pasted token. */
 export function newLoginCode(ttlMs = 5 * 60_000): string {
   const code = newToken();
   ensureDir(ws.secrets());
@@ -27,6 +27,14 @@ export function redeemLoginCode(code: string): boolean {
   const saved = readJson<{ sha256?: string; expires?: number }>(codeFile(), {});
   rmSync(codeFile(), { force: true });
   return Boolean(saved.sha256) && Date.now() < (saved.expires ?? 0) && safeEqual(sha(code), saved.sha256!);
+}
+
+/** Runs a script that restarts this engine, so it has to outlive it. Output goes to workspace/logs/system.log. */
+export function runDetached(script: string): void {
+  ensureDir(join(ws.root(), "logs"));
+  const fd = openSync(join(ws.root(), "logs", "system.log"), "w");
+  spawn(join(repoRoot(), "scripts", script), [], { cwd: repoRoot(), env: process.env, detached: true, stdio: ["ignore", fd, fd] }).unref();
+  closeSync(fd);
 }
 
 /** Runs one of the repo's setup scripts as a job, with its output in the job log. */

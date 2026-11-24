@@ -11,12 +11,12 @@ Needs macOS on Apple Silicon (Ubuntu with an NVIDIA GPU is untested), 16 GB of m
 ```bash
 git clone https://github.com/LucaLanzi/OpenHelper.git
 cd OpenHelper
-make install
+./openhelper install
 ```
 
 This installs everything, starts OpenHelper and opens the dashboard, already signed in. The **Setup** page then takes you through downloading the model (5.7 GB), setting up the sandbox and adding a repo.
 
-To open the dashboard later, go to <http://127.0.0.1:8740> or run `make open`. `workspace/` holds your private data and is never committed.
+To open the dashboard later, go to <http://127.0.0.1:8740>. If it asks you to sign in, run `./openhelper open`. `workspace/` holds your private data and is never committed.
 
 ## Add a repo
 
@@ -40,60 +40,19 @@ The sandbox VM starts by itself when a job needs it. To free its memory, press *
 
 ## Add a language
 
-Create `workspace/packs/languages/rust.toml`:
+On the **Library** page, enter its name, file extensions and test command under **Add a language**. Then press **Detect languages** on the project.
 
-```toml
-id = "rust"
-name = "Rust"
-detect = ["Cargo.toml"]
-source_globs = ["**/*.rs"]
-
-[[checks]]
-id = "test"
-name = "cargo test"
-kind = "test"              # syntax, build, test, lint or static
-run = "cargo test --offline"
-requires = ["cargo"]
-```
-
-Add the toolchain to `sandbox/Dockerfile`, run `make sandbox-vm`, and add `"rust"` to `languages` in `workspace/projects/<project>.toml`. Checks run with no network.
+If the sandbox doesn't have the language's tools, add them to `sandbox/Dockerfile` and press **Rebuild sandbox** on the **System** page. Until then, its checks show as skipped.
 
 ## Swap models
 
-Pick any downloaded model on the **Platforms** page. To add a new one, create `workspace/packs/models/my-model-q4km.toml`:
+On the **Models** page, press **Use as main**, **Use as light** or **Benchmark** on any downloaded model.
 
-```toml
-id = "my-model-q4km"
-name = "My Model"
-family = "my-family"
-kind = "dense"             # or "moe"
-params_b = 8
-active_params_b = 8
-quant = "Q4_K_M"
-size_gb = 5
-roles = ["main"]
-license = "apache-2.0"
-min_usable_gb = 8
-server_args = ["--jinja"]
-
-[source]
-hf_repo = "owner/repo-GGUF"
-filename = "my-model-Q4_K_M.gguf"
-```
-
-Add its id to `allowed` in your platform file, then:
-
-```bash
-make download-model ID=my-model-q4km
-make llama-swap-config
-make install-service
-```
-
-On a Mac, models over about 20 GB also need `make mac-gpu-limit`.
+To add one, paste a direct link to its `.gguf` file under **Add a model**, then press **Download**. Models over about 20 GB on a Mac also need one terminal command, because it asks for your password: `scripts/mac-gpu-limit.sh`.
 
 ## Copy weights to another machine
 
-GGUF files work on macOS and Linux. After `make install` on the other machine:
+GGUF files work on macOS and Linux. After `./openhelper install` on the other machine:
 
 ```bash
 # On the machine with the files. The last two lines copy a project's search index.
@@ -102,18 +61,14 @@ rsync -av workspace/projects/my-repo.toml other:OpenHelper/workspace/projects/
 rsync -av workspace/index/my-repo/ other:OpenHelper/workspace/index/my-repo/
 
 # On the other machine. Check the printed hash matches `shasum -a 256` on the first.
-node server/dist/cli.js models pin qwen3-8b-q4km --file workspace/models/Qwen3-8B-Q4_K_M.gguf
-make llama-swap-config
-make install-service
+./openhelper models pin qwen3-8b-q4km --file workspace/models/Qwen3-8B-Q4_K_M.gguf
 ```
 
-An index needs the same embedding model on both machines. If the repo path differs, update `repos` in the project file. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
+Then press **Use as main** on its **Models** page. An index needs the same embedding model on both machines. If the repo path differs, update `repos` under **Settings**. Never copy `workspace/secrets/`. OpenHelper has no training command yet.
 
 ## Update
 
-```bash
-git pull && make build && make install-service
-```
+Press **Update** on the **System** page.
 
 ## More
 

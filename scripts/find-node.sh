@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # find-node.sh [MIN_MAJOR] — print the bin directory of a Node.js >= MIN_MAJOR (default from
-# versions.lock), or exit 1. Used by the Makefile and setup scripts, so OpenHelper uses a new
+# versions.lock), or exit 1. Used by ./openhelper and the setup scripts, so OpenHelper uses a new
 # enough Node.js even when an older one comes first on your PATH (nvm, Homebrew node@20, apt).
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"

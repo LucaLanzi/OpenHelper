@@ -1,4 +1,4 @@
-# This machine's settings. `make init PLATFORM=NAME` sets `self`.
+# This machine's settings. `./openhelper init --platform NAME` sets `self`.
 self = "desktop"
 
 # This machine runs agents (node) and the dashboard (control). A second machine

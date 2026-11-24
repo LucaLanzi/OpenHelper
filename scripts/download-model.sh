@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make download-model ID=<model id> [URL=<direct url>]
+# scripts/download-model.sh <model id> [URL=<direct url>]
 # Downloads a model file after you confirm, then pins its SHA-256.
 
 # shellcheck source=scripts/lib.sh
@@ -23,7 +23,7 @@ license="$(field license)"
 if [ -z "$url" ]; then
     if [ -z "$repo" ] || [ -z "$file" ]; then
         die "the $id pack has no download source yet. Pick the GGUF file on Hugging Face, then run:
-  make download-model ID=$id URL=https://huggingface.co/<repo>/resolve/main/<file>.gguf"
+  scripts/download-model.sh $id https://huggingface.co/<repo>/resolve/main/<file>.gguf"
     fi
     url="https://huggingface.co/$repo/resolve/main/$file"
 fi

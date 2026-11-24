@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sandbox-vm.sh — set up the sandbox generated code runs in (`make sandbox-vm`).
+# sandbox-vm.sh — set up the sandbox generated code runs in (`scripts/sandbox-vm.sh`).
 #
 #   macOS: a Lima VM ("openhelper") with containerd, plus the sandbox image built inside it
 #   Linux: the sandbox image built with Podman or Docker
@@ -29,7 +29,7 @@ set_driver() {  # set_driver <driver>
     self="$(sed -n 's/^self *= *"\(.*\)"/\1/p' "$OH_WS/config.toml" 2>/dev/null | head -n1)"
     pf="$OH_WS/platforms/$self.toml"
     if [ -z "$self" ] || [ ! -f "$pf" ]; then
-        warn "no workspace yet; after make setup, set [sandbox] driver = \"$1\" in your platform file"
+        warn "no workspace yet; after scripts/setup.sh, set [sandbox] driver = \"$1\" in your platform file"
         return
     fi
     if grep -Eq "^driver *= *\"$1\"" "$pf"; then ok "$pf already uses the $1 sandbox"; return; fi
@@ -51,7 +51,7 @@ smoke() {  # smoke <command prefix...>: run a container with no network and chec
 }
 
 macos() {
-    have limactl || die "Lima is not installed; run make prereqs (or: brew install lima)"
+    have limactl || die "Lima is not installed; run scripts/install-prereqs.sh (or: brew install lima)"
     if [ -n "${STOP:-}" ]; then
         limactl stop "$VM" && ok "stopped the $VM VM"
         exit 0
@@ -80,7 +80,7 @@ macos() {
     # Lima's default VM runs containerd rootless (plain nerdctl); a VM set up with system
     # containerd needs sudo.
     found="$(lima_nerdctl "$VM" "$IMAGE")" ||
-        die "nerdctl is not working inside the VM; recreate it with: limactl delete -f $VM && make sandbox-vm"
+        die "nerdctl is not working inside the VM; recreate it with: limactl delete -f $VM && scripts/sandbox-vm.sh"
     read -r -a nerdctl <<< "$found"
     ok "${nerdctl[*]} works"
     if [ "${nerdctl[0]}" = sudo ]; then
@@ -99,11 +99,11 @@ macos() {
     printf '%s' "$out" | grep -q "NETWORK REACHABLE" && die "the sandbox can reach the network; not using it"
     ok "sandbox works with the network off"
     set_driver lima
-    echo "  Tip: the VM holds up to ${VM_MEMORY:-3} GiB. Stop it when you need the memory for a model: make sandbox-vm STOP=1"
+    echo "  Tip: the VM holds up to ${VM_MEMORY:-3} GiB. Stop it when you need the memory for a model: STOP=1 scripts/sandbox-vm.sh"
 }
 
 linux() {
-    if have podman; then rt=podman; elif have docker; then rt=docker; else die "no Podman or Docker; run make prereqs"; fi
+    if have podman; then rt=podman; elif have docker; then rt=docker; else die "no Podman or Docker; run scripts/install-prereqs.sh"; fi
     b "1/2 Sandbox image ($rt)"
     "$rt" build -t "$IMAGE" "$OH_ROOT/sandbox"
     ok "built $IMAGE"
