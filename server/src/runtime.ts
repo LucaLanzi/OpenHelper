@@ -12,7 +12,7 @@ import { repoRoot, ws } from "./core/paths.js";
 import { Platform as PlatformSchema } from "./core/schemas.js";
 import type { CheckKind, Platform, Project, WorkspaceConfig } from "./core/schemas.js";
 import { apply, readConfigFile, stage } from "./core/staging.js";
-import { embeddingModel, estimateIndex, recordTiming, workload } from "./index/estimate.js";
+import { embeddingModel, estimateIndex, liveEta, recordTiming, workload } from "./index/estimate.js";
 import { buildIndex, expandHome } from "./index/build.js";
 import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
 import { JobQueue, type Job } from "./jobs/queue.js";
@@ -319,10 +319,11 @@ export class Runtime {
     if (ctx.project.search === "hybrid" && !embed) throw new Error("Choose an embedding model for hybrid search");
     const estimate = estimateIndex(this.platform, workload(ctx.project), embed);
     const started = Date.now();
+    let base: { elapsed_ms: number; done: number } | undefined;
     const meta = await buildIndex(ctx.project, { log, signal: ctx.signal, ...(embed ? { llm: this.llm, embedModel: embed } : {}), progress: p => {
-      const remaining = Math.max(0, 1 - (p.phase === "embedding" ? p.embeddings_completed / Math.max(1, p.chunks) : p.files_processed / Math.max(1, estimate.workload.files)));
-      const measured = p.elapsed_ms / 1000 * remaining / Math.max(0.05, 1-remaining);
-      this.queue.updateProgress(job.id, { ...p, eta_min_s: p.phase === "complete" ? 0 : Math.max(0, Math.floor(Math.max(estimate.min_s-p.elapsed_ms/1000, measured * 0.5))), eta_max_s: p.phase === "complete" ? 0 : Math.ceil(Math.max(estimate.max_s-p.elapsed_ms/1000, measured * 2, 1)) });
+      if (!base && p.phase === "embedding" && p.embeddings_completed > 0) base = { elapsed_ms: p.elapsed_ms, done: p.embeddings_completed };
+      const [eta_min_s, eta_max_s] = liveEta(p, estimate, base);
+      this.queue.updateProgress(job.id, { ...p, eta_min_s, eta_max_s });
     }});
     // A fallback keyword build is not a successful sample for the requested embedding model.
     if (!embed || meta.embed_model === embed) recordTiming({ platform: this.platform.name, embed_model: embed, files: job.progress?.files_processed ?? 0, chunks: meta.chunks, duration_ms: Date.now()-started, at: new Date().toISOString() });

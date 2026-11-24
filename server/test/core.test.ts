@@ -22,6 +22,7 @@ import { implement, review } from "../src/agent/agents.js";
 import { filesFromPlan, retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
 import { projectModel } from "../src/runtime.js";
 import { buildIndex } from "../src/index/build.js";
+import { liveEta } from "../src/index/estimate.js";
 import { JobQueue } from "../src/jobs/queue.js";
 import { runChecks } from "../src/checks/runner.js";
 import { makeSandbox, type Sandbox } from "../src/sandbox/sandbox.js";
@@ -520,6 +521,21 @@ describe("project model choice", () => {
     expect(projectModel(p({ model: "mine" }), platform, "current", true)).toBe("plat-light");
     expect(projectModel(p({ model: "mine", light_model: "quick", language_mode: "selected" }), platform, "current", true)).toBe("quick");
     expect(projectModel(p({ model: "mine", language_mode: "selected" }), { model: { light: "" } } as Platform, "current", true)).toBe("mine");
+  });
+});
+
+describe("index ETA", () => {
+  it("switches the ETA to the measured embedding rate, not counting cached chunks", () => {
+    const est = { min_s: 1000, max_s: 90_000, workload: { files: 10, chunks: 10_000, doc_files: 0, missing_docs: [] } };
+    const p = { phase: "embedding", files_discovered: 10, files_processed: 10, chunks: 10_000, embeddings_completed: 4000, elapsed_ms: 5000, eta_min_s: 0, eta_max_s: 0 };
+    const base = { elapsed_ms: 5000, done: 4000 };
+    expect(liveEta(p, est, base)[1]).toBeGreaterThan(80_000);
+    // 1000 computed in 100 s: 10/s, 5000 left -> about 500 s.
+    const [lo, hi] = liveEta({ ...p, embeddings_completed: 5000, elapsed_ms: 105_000 }, est, base);
+    expect(lo).toBeLessThanOrEqual(500);
+    expect(hi).toBeGreaterThanOrEqual(500);
+    expect(hi).toBeLessThan(700);
+    expect(liveEta({ ...p, phase: "complete" }, est, base)).toEqual([0, 0]);
   });
 });
 

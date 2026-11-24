@@ -55,3 +55,20 @@ export function estimateIndex(p: Platform, work: Workload, embed: string, histor
     explanation: `${work.files} files including ${work.doc_files} documentation files; about ${work.chunks} chunks. ${embed ? `Embeddings: ${embed}.` : "Keyword search only."} CPU, memory, storage, model speed and competing work affect duration. Downloads and queue wait are excluded.${work.missing_docs.length ? ` Missing documentation: ${work.missing_docs.join(", ")}; add it in Library and rebuild.` : ""}` };
 }
 
+/**
+ * ETA while a build runs. Once embedding has run a while, its measured rate replaces the prior estimate.
+ * `base` is the first embedding report (cache hits already counted), so reused chunks don't inflate the rate.
+ */
+export function liveEta(p: IndexProgress, est: { min_s: number; max_s: number; workload: Workload }, base?: { elapsed_ms: number; done: number }): [number, number] {
+  if (p.phase === "complete") return [0, 0];
+  if (p.phase === "embedding" && base) {
+    const done = p.embeddings_completed - base.done, secs = (p.elapsed_ms - base.elapsed_ms) / 1000;
+    if (done >= 64 && secs >= 10) {
+      const left = (p.chunks - p.embeddings_completed) / (done / secs);
+      return [Math.floor(left * 0.8), Math.ceil(left * 1.3 + 5)];
+    }
+  }
+  const remaining = Math.max(0, 1 - (p.phase === "embedding" ? p.embeddings_completed / Math.max(1, p.chunks) : p.files_processed / Math.max(1, est.workload.files)));
+  const measured = p.elapsed_ms / 1000 * remaining / Math.max(0.05, 1 - remaining);
+  return [Math.max(0, Math.floor(Math.max(est.min_s - p.elapsed_ms / 1000, measured * 0.5))), Math.ceil(Math.max(est.max_s - p.elapsed_ms / 1000, measured * 2, 1))];
+}

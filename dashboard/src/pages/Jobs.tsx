@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { events, get, post, type Confidence, type Job, type JobSummary } from "../api";
+import { events, get, post, type Confidence, type Job, type JobSummary, type IndexEstimate as Estimate } from "../api";
+import { IndexEstimate, IndexProgressView } from "../components/IndexEstimate";
 import { Diff, Empty, ErrorNote, Markdown, PageHead, Signal, State, ago, useLoad, useToast } from "../components/ui";
 import { ProjectPicker, useApp } from "../context";
 import { go, href } from "../router";
@@ -24,6 +25,7 @@ export function Jobs() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => events((ev) => ev === "job" && jobs.reload()), [jobs.reload]);
+  const estimate = useLoad(() => type === "index" && project ? get<Estimate>(`/projects/${project}/estimate`) : Promise.resolve(null), [type,project]);
   const t = TYPES.find((x) => x.id === type)!;
 
   const create = async (start: boolean) => {
@@ -74,7 +76,8 @@ export function Jobs() {
             </select>
           </label>
         )}
-        <ErrorNote error={error} />
+        {type === "index" && estimate.data && <IndexEstimate estimate={estimate.data}/>}
+        <ErrorNote error={error || estimate.error} />
         <div className="row">
           <button className="primary" disabled={!project || (Boolean(t.field) && !text.trim())} onClick={() => void create(true)}>
             Start now
@@ -155,6 +158,7 @@ export function JobView({ id }: { id: string }) {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [lines]);
 
+  useEffect(() => { const t=window.setInterval(()=>job.reload(),3000);return ()=>window.clearInterval(t); },[job.reload]);
   const j = job.data;
   if (job.error) return <ErrorNote error={job.error} />;
   if (!j) return null;
@@ -185,6 +189,7 @@ export function JobView({ id }: { id: string }) {
           </button>
         )}
       </PageHead>
+      {j.progress && <IndexProgressView progress={j.progress}/>}
       {j.error && <div className="notice error">{j.error}</div>}
 
       {j.type === "explain" && typeof o.answer === "string" && (
@@ -240,7 +245,7 @@ export function JobView({ id }: { id: string }) {
 
       <div className="section">
         <h2>Log</h2>
-        <pre className="log mono" ref={logRef}>
+        <pre id="job-log" className="log mono" ref={logRef}>
           {lines.length ? lines.join("\n") : "Nothing logged yet."}
         </pre>
         <p className="small muted" style={{ marginTop: 8 }}>
