@@ -288,6 +288,15 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     return { ok: true };
   });
 
+  // Frees disk space; the model stays listed so it can be downloaded again.
+  app.delete("/api/models/:id/file", async (req) => {
+    localOnly(req);
+    if (body<{ confirm?: boolean }>(req).confirm !== true) bad("confirm the deletion");
+    const r = clientError(() => rt.deleteModelFile(paramId(req)));
+    audit("user", "model.delete_file", { model: paramId(req), freed_bytes: r.freed_bytes });
+    return { ok: true, freed_bytes: r.freed_bytes };
+  });
+
   for (const type of ["bench", "tune"] as const) {
     app.post(`/api/models/:id/${type}`, async (req) => {
       localOnly(req);

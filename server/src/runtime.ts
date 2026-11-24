@@ -1,5 +1,5 @@
 import { assertAgent, runRemote } from "./hooks.js";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { explain, implement, plan, review } from "./agent/agents.js";
 import type { AgentContext } from "./agent/context.js";
@@ -219,6 +219,25 @@ export class Runtime {
       default:
         throw new Error(`unknown job type ${String(job.type)}`);
     }
+  }
+
+  /** Deletes a downloaded model's file and any partial download. Its pack stays, so it can be downloaded again. */
+  deleteModelFile(id: string): { file: string; freed_bytes: number } {
+    const m = loadModels().find((x) => x.id === id);
+    if (!m) throw new Error(`no model ${id}`);
+    const uses = this.modelsOverview().find((x) => x.id === id)!.uses;
+    if (uses.length) throw new Error(`${m.name} is this machine's ${uses.join(" and ")} model. Choose another model for that first.`);
+    if (this.queue.list(Number.MAX_SAFE_INTEGER).some((j) => ["created", "queued", "running"].includes(j.status) && j.input.id === id && ["model-download", "bench", "tune"].includes(j.type)))
+      throw new Error(`a job is using ${m.name}; wait for it or cancel it on the Jobs page`);
+    const file = modelFile(m);
+    let freed_bytes = 0;
+    for (const f of [file, `${file}.part`]) {
+      if (!existsSync(f)) continue;
+      freed_bytes += statSync(f).size;
+      rmSync(f);
+    }
+    if (!freed_bytes) throw new Error(`${m.name} is not downloaded`);
+    return { file, freed_bytes };
   }
 
   private hasModel(id: string): boolean {

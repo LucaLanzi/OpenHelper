@@ -31,6 +31,8 @@ async function fixture(component,opts={}){
   else if(path==="/projects/configure")value={project:data.project};
   else if(path==="/index/estimate" || path.endsWith("/estimate"))value=estimate;
   else if(path.endsWith("/removal"))value={remove:["projects/demo.toml","index/demo","evals/demo"],retain:["/repo","Shared documentation and models"],pending_jobs:0};
+  else if(path==="/models/all")value=[{id:"spare",name:"Spare model",kind:"dense",quant:"Q4_K_M",size_gb:5,roles:["main"],license:"MIT",present:true,pinned:true,has_source:true,uses:[],can_tune:false},{id:"main",name:"Main model",kind:"dense",quant:"Q4_K_M",size_gb:9,roles:["main"],license:"MIT",present:true,pinned:true,has_source:true,uses:["main"],can_tune:false}];
+  else if(path.endsWith("/file") && r.method()==="DELETE")value={ok:true,freed_bytes:5e9};
   else if(r.method()==="DELETE")value={ok:true,message:"Removed project demo. Repositories preserved."};
   else if(path.startsWith("/results"))value=[];
   else if(path==="/docs")value=docs;
@@ -62,6 +64,14 @@ try{
   const {page,calls}=await fixture("projects",{project:true});const remove=page.getByRole("button",{name:"Remove project",exact:true});await remove.click();const dialog=page.getByRole("dialog",{name:"Remove project demo?"});await dialog.waitFor();assert.match(await dialog.innerText(),/index\/demo/);assert.match(await dialog.innerText(),/Shared documentation and models/);assert.equal(await page.getByRole("button",{name:"Cancel",exact:true}).evaluate(e=>document.activeElement===e),true);
   await page.keyboard.press("Shift+Tab");assert.equal(await dialog.evaluate(d=>d.contains(document.activeElement)),true);await page.keyboard.press("Escape");await dialog.waitFor({state:"detached"});assert.equal(calls.some(c=>c.method==="DELETE"),false);assert.equal(await remove.evaluate(e=>document.activeElement===e),true);
   await remove.click();await page.getByRole("button",{name:"Confirm removal"}).click();await dialog.waitFor({state:"detached"});assert.equal(calls.find(c=>c.method==="DELETE").data.confirm,true);await page.close();
+ });
+ await test("deleting a model file needs confirmation and is blocked for a model in use",async()=>{
+  const {page,calls}=await fixture("models");const rows=page.getByRole("row");
+  assert.equal(await rows.filter({hasText:"Main model"}).getByRole("button",{name:"Delete file"}).isDisabled(),true);
+  await rows.filter({hasText:"Spare model"}).getByRole("button",{name:"Delete file"}).click();const dialog=page.getByRole("dialog",{name:"Delete Spare model?"});await dialog.waitFor();assert.match(await dialog.innerText(),/download it again/);
+  await page.keyboard.press("Escape");await dialog.waitFor({state:"detached"});assert.equal(calls.some(c=>c.method==="DELETE"),false);
+  await rows.filter({hasText:"Spare model"}).getByRole("button",{name:"Delete file"}).click();await page.getByRole("button",{name:"Delete 5 GB"}).click();await page.getByText("Freed 5.0 GB",{exact:false}).waitFor();
+  const d=calls.find(c=>c.method==="DELETE");assert.equal(d.path,"/models/spare/file");assert.equal(d.data.confirm,true);await page.close();
  });
  await test("Library shares searchable documentation cards and explains checks and missing tools",async()=>{
   const {page}=await fixture("library");await page.getByLabel("Search documentation").fill("Python");await page.getByRole("heading",{name:"Python reference 3.14"}).waitFor();assert.equal(await page.getByRole("heading",{name:"Local manual 1"}).count(),0);await page.getByText("Python · 1 checks",{exact:true}).click();await page.getByText("Missing tools cause checks",{exact:false}).waitFor();await page.close();

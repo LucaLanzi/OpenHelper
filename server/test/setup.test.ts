@@ -3,6 +3,7 @@ import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs
 import { basename, dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, type App } from "../src/app.js";
+import { readAudit } from "../src/core/audit.js";
 import { toToml } from "../src/core/fsutil.js";
 import { findModel, findProject } from "../src/core/load.js";
 import { ensureApiToken } from "../src/core/secrets.js";
@@ -178,5 +179,36 @@ describe("this machine only", () => {
 
   it("reports the install", async () => {
     expect(await getJson("/api/system")).toMatchObject({ version: "0.0.1" });
+  });
+});
+
+describe("deleting a downloaded model", () => {
+  const del = (url: string, payload: object = { confirm: true }, remoteAddress = "127.0.0.1") => a.app.inject({ method: "DELETE", url, headers: auth(), payload, remoteAddress });
+  type Row = { id: string; present: boolean; uses: string[] };
+
+  it("frees the file and any partial download, keeps the model listed, and audits it", async () => {
+    const rows = await getJson<Row[]>("/api/models/all");
+    const spare = rows.find((m) => !m.uses.length)!;
+    const file = modelFile(findModel(spare.id));
+    write(dirname(file), basename(file), "12345");
+    write(dirname(file), `${basename(file)}.part`, "678");
+    expect((await del(`/api/models/${spare.id}/file`, {})).statusCode).toBe(400);
+    expect((await del(`/api/models/${spare.id}/file`, { confirm: true }, "100.64.0.9")).statusCode).toBe(403);
+    const r = await del(`/api/models/${spare.id}/file`);
+    expect(r.json()).toEqual({ ok: true, freed_bytes: 8 });
+    expect(existsSync(file) || existsSync(`${file}.part`)).toBe(false);
+    expect((await getJson<Row[]>("/api/models/all")).find((m) => m.id === spare.id)).toMatchObject({ present: false });
+    expect(readAudit().some((e) => e.action === "model.delete_file")).toBe(true);
+    expect((await del(`/api/models/${spare.id}/file`)).json().error).toContain("not downloaded");
+  });
+
+  it("refuses a model this machine uses", async () => {
+    const main = (await getJson<Row[]>("/api/models/all")).find((m) => m.uses.includes("main"))!;
+    const file = modelFile(findModel(main.id));
+    if (!existsSync(file)) write(dirname(file), basename(file), "x");
+    const r = await del(`/api/models/${main.id}/file`);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toContain("Choose another model for that first");
+    expect(existsSync(file)).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { get, post, type JobSummary } from "../api";
+import { del, get, post, type JobSummary } from "../api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
 import { go } from "../router";
 
@@ -50,6 +51,22 @@ export function Models() {
 function Row({ m, onChange, onError }: { m: ModelRow; onChange: () => void; onError: (e: string | null) => void }) {
   const toast = useToast();
   const [url, setUrl] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const remove = async () => {
+    onError(null);
+    setDeleting(true);
+    try {
+      const r = await del<{ freed_bytes: number }>(`/models/${m.id}/file`);
+      toast(`Deleted ${m.name}. Freed ${(r.freed_bytes / 1e9).toFixed(1)} GB.`);
+      onChange();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
   const job = async (action: string, payload: object = {}) => {
     onError(null);
     try {
@@ -106,6 +123,20 @@ function Row({ m, onChange, onError }: { m: ModelRow; onChange: () => void; onEr
                   </button>
                 )}
               </>
+            )}
+            <button
+              className="quiet danger"
+              disabled={m.uses.length > 0}
+              title={m.uses.length ? "Choose another model for this role first" : undefined}
+              onClick={() => setConfirming(true)}
+            >
+              Delete file
+            </button>
+            {confirming && (
+              <ConfirmDialog title={`Delete ${m.name}?`} label={`Delete ${m.size_gb} GB`} busy={deleting} onCancel={() => setConfirming(false)} onConfirm={() => void remove()}>
+                <p>This deletes the model file from this computer and frees about {m.size_gb} GB.</p>
+                <p>The model stays on this list, so you can download it again later.</p>
+              </ConfirmDialog>
             )}
           </div>
         )}
