@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, type App } from "../src/app.js";
 import { ensureApiToken } from "../src/core/secrets.js";
+import { Project, Platform } from "../src/core/schemas.js";
+import { loadFile } from "../src/core/load.js";
+import { toToml } from "../src/core/fsutil.js";
+import type { Job } from "../src/jobs/queue.js";
 import type { WorkflowRun } from "../src/workflow/engine.js";
 import { REPO_ROOT, samplePythonRepo, tempWorkspace } from "./helpers.js";
 import { startMockLlm, type MockLlm } from "./mock-llm.js";
@@ -42,7 +46,7 @@ function setupWorkspace(dir: string, self: string, roles: string, repo: string, 
   cfg = cfg.replace(/plan = "desktop"/, 'plan = "mac"');
   writeFileSync(join(dir, "config.toml"), cfg);
   const macToml = readFileSync(join(dir, "platforms", "mac.toml"), "utf8").replace(/^url = .*$/m, `url = "http://127.0.0.1:${macPort}"`);
-  writeFileSync(join(dir, "platforms", "mac.toml"), macToml);
+  writeFileSync(join(dir, "platforms", "mac.toml"), macToml.replace(/^agents =/m, 'hooks = ["health", "capabilities", "models", "job-status", "job-logs", "index-estimate", "start-job", "cancel-job", "index"]\nagents ='));
   writeFileSync(join(dir, "projects", "calc.toml"), `name = "calc"\nrepos = ["${repo}"]\nlanguages = ["python"]\ndocs = []\n`);
   writeFileSync(join(dir, "links.toml"), linksToml);
 }
@@ -115,6 +119,19 @@ describe("two platforms", () => {
     expect(ps.find((p) => p.name === "mac")).toMatchObject({ reachable: true, status: { platform: "mac" } });
     expect(ps.find((p) => p.name === "desktop")).toMatchObject({ reachable: true });
   });
+
+  it("runs an index hook on the selected platform and returns progress and its own timing estimate", async () => {
+    const file=join(deskWs,"projects","calc.toml");const original=readFileSync(file,"utf8");
+    const project=loadFile(Project,file);writeFileSync(file,toToml({...project,platform:"mac",model:"qwen3-8b-q4km",search:"keyword",exclude:["tests/**"]}));
+    try {
+      const job=await api<Job>("POST","/api/jobs",{type:"index",project:"calc",start:true});
+      const done=await desktop.rt.queue.wait(job.id,20000);
+      expect(done.error).toBeUndefined();expect(done.status).toBe("done");expect(done.platform).toBe("mac");expect(done.output?.remote_platform).toBe("mac");expect(done.progress?.phase).toBe("complete");
+      const estimate=await api<{basis:string}>("GET","/api/projects/calc/estimate");expect(estimate.basis).toContain("historical");
+      const explain=await api<Job>("POST","/api/jobs",{type:"explain",project:"calc",start:true,input:{task:"where is add?"}});
+      const answer=await desktop.rt.queue.wait(explain.id,20000);expect(answer.status).toBe("done");expect(mock.requests.filter(r=>r.path==="/v1/chat/completions").at(-1)?.model).toBe("qwen3-8b-q4km");
+    } finally {writeFileSync(file,original);}
+  },30000);
 
   it("plans on the Mac, implements on the desktop, reviews on the Mac", async () => {
     const run = await api<WorkflowRun>("POST", "/api/workflows/implement-feature/run", { project: "calc", inputs: { task: "Add a subtraction helper" } });

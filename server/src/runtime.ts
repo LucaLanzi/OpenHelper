@@ -1,3 +1,4 @@
+import { assertAgent, runRemote } from "./hooks.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { explain, implement, plan, review } from "./agent/agents.js";
@@ -9,8 +10,9 @@ import { createWorktree, headSha, removeWorktree } from "./core/git.js";
 import { findModel, findProject, loadConfig, loadDocPacks, loadFile, loadLanguages, loadModels, loadPlatforms, loadProjects } from "./core/load.js";
 import { repoRoot, ws } from "./core/paths.js";
 import { Platform as PlatformSchema } from "./core/schemas.js";
-import type { CheckKind, Platform, WorkspaceConfig } from "./core/schemas.js";
+import type { CheckKind, Platform, Project, WorkspaceConfig } from "./core/schemas.js";
 import { apply, readConfigFile, stage } from "./core/staging.js";
+import { embeddingModel, estimateIndex, recordTiming, workload } from "./index/estimate.js";
 import { buildIndex, expandHome } from "./index/build.js";
 import { addLocalDocs, docStatus, fetchDocPack } from "./index/docs.js";
 import { JobQueue, type Job } from "./jobs/queue.js";
@@ -26,6 +28,11 @@ interface State {
 }
 
 /** Everything one machine runs: its platform config, model server client, sandbox and job queue. */
+/** The project's own choice first, then this platform's. A blank light model means the platform's light model. */
+export function projectModel(p: Project, platform: Platform, current: string, light = false): string {
+  return (light && (p.light_model || platform.model.light)) || p.model || current;
+}
+
 export class Runtime {
   config: WorkspaceConfig;
   platform: Platform;
@@ -77,16 +84,16 @@ export class Runtime {
   }
 
   private ctx(job: Job, log: (s: string) => void, signal: AbortSignal): AgentContext {
-    const project = findProject(job.project);
+    const project = job.project_config ?? findProject(job.project);
     return {
       config: this.config,
       platform: this.platform,
       project,
       llm: this.llm,
-      model: job.model || this.currentModel,
-      ...(this.platform.model.embed ? { embedModel: this.platform.model.embed } : {}),
+      model: job.model || projectModel(project, this.platform, this.currentModel, job.type === "explain" && job.input.light === true),
+      ...(embeddingModel(project, this.platform) ? { embedModel: embeddingModel(project, this.platform) } : {}),
       sandbox: makeSandbox(this.platform.sandbox),
-      languages: loadLanguages(),
+      languages: loadLanguages().filter(l => project.language_mode !== "selected" || project.languages.includes(l.id)).map(l => ({ ...l, checks: l.checks.filter(c => !project.checks || project.checks.includes(`${l.id}/${c.id}`)) })),
       log,
       signal,
       usage: job.usage,
@@ -94,6 +101,8 @@ export class Runtime {
   }
 
   private async handle(job: Job, log: (s: string) => void, signal: AbortSignal): Promise<Record<string, unknown>> {
+    if (job.platform !== this.platform.name) return runRemote(this, job, log, signal);
+    assertAgent(this, job.type);
     if (job.type === "docs") {
       const id = String(job.input.pack ?? "");
       const pack = loadDocPacks().find((p) => p.id === id);
@@ -191,9 +200,9 @@ export class Runtime {
             log(`could not fetch ${id}: ${(e as Error).message}; continuing without it`);
           }
         }
-        return this.buildProjectIndex(ctx, log);
+        return this.buildProjectIndex(ctx, log, job);
       case "index":
-        return this.buildProjectIndex(ctx, log);
+        return this.buildProjectIndex(ctx, log, job);
       case "mine": {
         const tasks = mineProject(ctx.project, ctx.languages, { limit: Number(job.input.limit ?? 100) });
         const file = saveTasks(ctx.project.name, tasks);
@@ -305,9 +314,19 @@ export class Runtime {
     };
   }
 
-  private async buildProjectIndex(ctx: AgentContext, log: (s: string) => void): Promise<Record<string, unknown>> {
-    const embed = this.platform.model.embed;
-    return { ...(await buildIndex(ctx.project, { log, ...(embed ? { llm: this.llm, embedModel: embed } : {}) })) };
+  private async buildProjectIndex(ctx: AgentContext, log: (s: string) => void, job: Job): Promise<Record<string, unknown>> {
+    const embed = embeddingModel(ctx.project, this.platform);
+    if (ctx.project.search === "hybrid" && !embed) throw new Error("Choose an embedding model for hybrid search");
+    const estimate = estimateIndex(this.platform, workload(ctx.project), embed);
+    const started = Date.now();
+    const meta = await buildIndex(ctx.project, { log, signal: ctx.signal, ...(embed ? { llm: this.llm, embedModel: embed } : {}), progress: p => {
+      const remaining = Math.max(0, 1 - (p.phase === "embedding" ? p.embeddings_completed / Math.max(1, p.chunks) : p.files_processed / Math.max(1, estimate.workload.files)));
+      const measured = p.elapsed_ms / 1000 * remaining / Math.max(0.05, 1-remaining);
+      this.queue.updateProgress(job.id, { ...p, eta_min_s: p.phase === "complete" ? 0 : Math.max(0, Math.floor(Math.max(estimate.min_s-p.elapsed_ms/1000, measured * 0.5))), eta_max_s: p.phase === "complete" ? 0 : Math.ceil(Math.max(estimate.max_s-p.elapsed_ms/1000, measured * 2, 1)) });
+    }});
+    // A fallback keyword build is not a successful sample for the requested embedding model.
+    if (!embed || meta.embed_model === embed) recordTiming({ platform: this.platform.name, embed_model: embed, files: job.progress?.files_processed ?? 0, chunks: meta.chunks, duration_ms: Date.now()-started, at: new Date().toISOString() });
+    return { ...meta, duration_ms: Date.now()-started, files: job.progress?.files_processed ?? 0 };
   }
 
   async status() {
@@ -321,6 +340,7 @@ export class Runtime {
       loaded: healthy ? await this.llm.running() : [],
       llm_healthy: healthy,
       queue: this.queue.state(),
+      active_projects: [...new Set(this.queue.list(Number.MAX_SAFE_INTEGER).filter(j => ["queued","running"].includes(j.status) || this.queue.state().running === j.id).map(j => j.project))],
       sandbox: this.platform.sandbox.driver,
       auto_run: this.platform.auto_run,
       measured: this.platform.measured,

@@ -17,6 +17,8 @@ export interface Job {
   model: string;
   status: JobStatus;
   input: Record<string, unknown>;
+  project_config?: import("../core/schemas.js").Project;
+  progress?: import("../index/estimate.js").IndexProgress;
   output?: Record<string, unknown>;
   error?: string;
   log: string[];
@@ -77,7 +79,7 @@ export class JobQueue extends EventEmitter {
     this.emit("job", j);
   }
 
-  create(p: Pick<Job, "type" | "project" | "platform" | "model" | "input"> & { origin?: Job["origin"] }): Job {
+  create(p: Pick<Job, "type" | "project" | "platform" | "model" | "input"> & { origin?: Job["origin"]; project_config?: Job["project_config"] }): Job {
     const j: Job = {
       id: newId(p.type),
       type: p.type,
@@ -90,12 +92,25 @@ export class JobQueue extends EventEmitter {
       usage: { prompt_tokens: 0, completion_tokens: 0 },
       created_at: new Date().toISOString(),
       ...(p.origin ? { origin: p.origin } : {}),
+      ...(p.project_config ? {project_config:p.project_config} : {}),
     };
     this.jobs.set(j.id, j);
     this.order.push(j.id);
     this.save(j);
     audit("queue", "job.create", { id: j.id, type: j.type, project: j.project }, j.platform);
     return j;
+  }
+
+  updateProgress(id: string, progress: import("../index/estimate.js").IndexProgress) {
+    const job = this.mustGet(id); job.progress = progress; this.save(job);
+  }
+
+  hasActive(project?: string): boolean {
+    return [...this.jobs.values()].some(j => (!project || j.project === project) && (["queued", "running"].includes(j.status) || this.running?.id === j.id));
+  }
+
+  cancelPending(project: string) {
+    for (const j of this.jobs.values()) if (j.project === project && j.status === "created") this.cancel(j.id);
   }
 
   get(id: string): Job | undefined {

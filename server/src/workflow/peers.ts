@@ -14,12 +14,13 @@ export class PeerClient {
   async call<T>(method: string, path: string, body?: unknown, timeoutMs = 15_000): Promise<T> {
     const res = await fetch(`${this.p.url.replace(/\/+$/, "")}${path}`, {
       method,
+      redirect: "error",
       headers: { authorization: `Bearer ${this.token()}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await res.text();
-    if (!res.ok) throw new Error(`${this.p.name} ${method} ${path}: ${res.status} ${text.slice(0, 300)}`);
+    if (!res.ok) throw new Error(`${this.p.name} ${method} ${path}: ${res.status} (remote request failed; check the remote job log)`);
     return (text ? JSON.parse(text) : {}) as T;
   }
 

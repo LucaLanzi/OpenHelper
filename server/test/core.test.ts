@@ -20,6 +20,7 @@ import { validateWorkflow } from "../src/core/workflow-def.js";
 import { addLocalDocs, DOC_FETCH_USER_AGENT, docStatus, fetchDocPack, infoToText } from "../src/index/docs.js";
 import { implement, review } from "../src/agent/agents.js";
 import { filesFromPlan, retrieve, retrieveAt, type AgentContext } from "../src/agent/context.js";
+import { projectModel } from "../src/runtime.js";
 import { buildIndex } from "../src/index/build.js";
 import { JobQueue } from "../src/jobs/queue.js";
 import { runChecks } from "../src/checks/runner.js";
@@ -507,6 +508,18 @@ describe("doc packs", () => {
     await buildIndex(ProjectSchema.parse({ name: "calc", repos: [samplePythonRepo()], docs: ["cppreference", "python-stdlib"] }), { log: (s) => lines.push(s) });
     expect(lines.join("\n")).toContain("doc pack cppreference not fetched yet; download it and add it on the Library page");
     expect(lines.join("\n")).toContain("doc pack python-stdlib not fetched yet; fetch it on the Library page");
+  });
+});
+
+describe("project model choice", () => {
+  it("uses the project's models first, then the platform's", () => {
+    const platform = { model: { light: "plat-light" } } as Platform;
+    const p = (o: object) => ProjectSchema.parse({ name: "p", repos: ["/r"], ...o });
+    expect(projectModel(p({}), platform, "current")).toBe("current");
+    expect(projectModel(p({ model: "mine" }), platform, "current")).toBe("mine");
+    expect(projectModel(p({ model: "mine" }), platform, "current", true)).toBe("plat-light");
+    expect(projectModel(p({ model: "mine", light_model: "quick", language_mode: "selected" }), platform, "current", true)).toBe("quick");
+    expect(projectModel(p({ model: "mine", language_mode: "selected" }), { model: { light: "" } } as Platform, "current", true)).toBe("mine");
   });
 });
 

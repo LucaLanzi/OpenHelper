@@ -89,6 +89,8 @@ export class WorkflowEngine {
     void this.execute(w, r, abort.signal, at);
   }
 
+  all(): WorkflowRun[] { return [...this.runs.values()]; }
+
   list(): WorkflowRun[] {
     return [...this.runs.values()].sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 100);
   }

@@ -148,12 +148,21 @@ export const ModelOverride = z.object({
   extra_args: z.array(z.string()).default([]),
 });
 
+export const AgentHook = z.enum(["health", "capabilities", "models", "job-status", "job-logs", "index-estimate", "start-job", "cancel-job", "index", "workflow-step"]);
+export type AgentHook = z.infer<typeof AgentHook>;
+
 export const Platform = z.object({
+  display_name: z.string().default(""),
+  connection: z.enum(["api", "tailscale", "ssh"]).default("api"),
+  tailscale_hostname: z.string().default(""),
+  tailscale_ipv4: z.string().default(""),
+  ssh: z.object({ host: z.string().default(""), port: z.number().int().min(1).max(65535).default(22), user: z.string().default(""), auth_ref: z.string().default("") }).default({ host: "", port: 22, user: "", auth_ref: "" }),
+  hooks: z.array(AgentHook).default(["health", "capabilities", "models", "job-status", "job-logs", "index-estimate"]),
   name: z.string().regex(/^[a-z0-9_-]+$/),
   description: z.string().default(""),
   /** Base URL of this platform's node service, as reachable from the control plane. */
   url: z.string().url(),
-  os: z.enum(["linux", "macos", "other"]).default("linux"),
+  os: z.enum(["linux", "macos", "windows", "other"]).default("other"),
   /** Name of the env var or secrets file key that holds this node's token. */
   token_ref: z.string().default(""),
   model: z.object({
@@ -216,6 +225,11 @@ export const Project = z.object({
   model: z.string().default(""),
   light_model: z.string().default(""),
   adapter: z.string().default(""),
+  platform: z.string().default(""),
+  search: z.enum(["platform-default", "keyword", "hybrid"]).default("platform-default"),
+  embed_model: z.string().default(""),
+  language_mode: z.enum(["auto", "selected"]).default("auto"),
+  checks: z.array(z.string()).optional(),
   /** Glob patterns never indexed or sent to the model. */
   exclude: z.array(z.string()).default([]),
 });
@@ -249,7 +263,7 @@ export const WorkspaceConfig = z.object({
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfig>;
 
 export const HardwareInfo = z.object({
-  os: z.enum(["linux", "macos", "other"]),
+  os: z.enum(["linux", "macos", "windows", "other"]),
   arch: z.string(),
   cpu: z.string(),
   cores: z.number(),

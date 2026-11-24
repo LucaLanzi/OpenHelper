@@ -16,7 +16,7 @@ const gib = (bytes: number) => Math.round((bytes / 1024 ** 3) * 10) / 10;
 /** Detect what `./openhelper plan` needs: memory, GPU, disk. Nothing is sent anywhere. */
 export function detectHardware(diskPath = process.cwd()): HardwareInfo {
   const platform = os.platform();
-  const osName = platform === "linux" ? "linux" : platform === "darwin" ? "macos" : "other";
+  const osName = platform === "linux" ? "linux" : platform === "darwin" ? "macos" : platform === "win32" ? "windows" : "other";
   const cpus = os.cpus();
   let gpu: HardwareInfo["gpu"] = { vendor: "none", name: "", vram_gb: 0 };
   let unified = false;

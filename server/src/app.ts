@@ -1,3 +1,6 @@
+import { ZodError } from "zod";
+import { managementRoutes, healthRecord, rememberHealth } from "./management-routes.js";
+import { assertAgent } from "./hooks.js";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -33,7 +36,7 @@ import type { Job, JobType } from "./jobs/queue.js";
 import { loadTasks } from "./miner/mine.js";
 import { addLanguagePack, addModelPack, redetected } from "./packs.js";
 import { addProject, pickPath } from "./projects.js";
-import { Runtime } from "./runtime.js";
+import { projectModel, Runtime } from "./runtime.js";
 import { limaPower, limaState, makeSandbox } from "./sandbox/sandbox.js";
 import { redeemLoginCode, runDetached } from "./setup.js";
 import { WorkflowEngine } from "./workflow/engine.js";
@@ -72,7 +75,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
   const roles = new Set(rt.config.roles);
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
-    const status = err instanceof HttpError ? err.status : (err.statusCode ?? 500);
+    const status = err instanceof HttpError ? err.status : err instanceof ZodError ? 400 : (err.statusCode ?? 500);
     void reply.status(status).send({ error: err.message });
   });
 
@@ -88,6 +91,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       await reply.status(401).send({ error: "missing or wrong token" });
     }
   });
+
+  managementRoutes(app, rt, engine);
 
   app.get("/api/health", async () => ({ ok: true, platform: rt.platform.name, version: VERSION, roles: [...roles] }));
 
@@ -124,12 +129,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       if (!b.project) bad("project is required");
       findProject(b.project);
     }
-    const job = rt.queue.create({ type: b.type, project: b.project ?? "", platform: rt.platform.name, model: b.model ?? "", input: b.input ?? {} });
+    assertAgent(rt, b.type);
+    const job = rt.queue.create({ type: b.type, project: b.project ?? "", platform: b.project ? findProject(b.project).platform || rt.platform.name : rt.platform.name, model: b.model ?? "", input: b.input ?? {} });
     // Batch jobs only run when a person starts them; `start: true` is that person pressing Start.
     if (b.start) rt.queue.start(job.id);
     return job;
   });
-  app.post("/api/jobs/:id/start", async (req) => rt.queue.start((req.params as { id: string }).id));
+  app.post("/api/jobs/:id/start", async (req) => { const id = (req.params as {id:string}).id; const job = rt.queue.get(id); if (job?.project) findProject(job.project); return rt.queue.start(id); });
   app.post("/api/jobs/:id/cancel", async (req) => rt.queue.cancel((req.params as { id: string }).id));
   app.post("/api/queue", async (req) => {
     rt.queue.pause(Boolean(body<{ paused?: boolean }>(req).paused));
@@ -152,6 +158,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       throw new HttpError(403, d.allowed ? budget.reason : d.reason);
     }
     if (!JOB_TYPES.includes(b.job.type)) bad("bad job type");
+    assertAgent(rt, b.job.type);
+    if (![env.hops, env.tokens, Date.parse(env.started_at)].every(Number.isFinite) || env.hops < 0 || env.tokens < 0) bad("invalid budget envelope");
     findProject(b.job.project);
     const job = rt.queue.create({
       type: b.job.type,
@@ -166,6 +174,12 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     rt.queue.start(job.id, `workflow@${env.from}`);
     return job;
   });
+
+  app.get("/api/project-options", async () => ({
+    self: rt.platform.name, platforms: loadPlatforms(), models: rt.modelsOverview(),
+    docs: loadDocPacks().map(p => ({...p,status:docStatus(p)})),
+    languages: loadLanguages().map(l => ({id:l.id,name:l.name,detect:l.detect,checks:l.checks.map(c=>c.name),details:l.checks.map(({id,name,kind,requires,when_files})=>({id,name,kind,requires,when_files})),sandbox:rt.platform.sandbox.driver})),
+  }));
 
   app.get("/api/projects", async () =>
     loadProjects().map((p) => ({
@@ -286,7 +300,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
 
   // --- languages ---------------------------------------------------------------------------
   app.get("/api/languages", async () =>
-    loadLanguages().map((l) => ({ id: l.id, name: l.name, detect: l.detect, checks: l.checks.map((c) => c.name) })),
+    loadLanguages().map((l) => ({ id: l.id, name: l.name, detect: l.detect, checks: l.checks.map((c) => c.name), details: l.checks.map(({ id, name, kind, requires, when_files }) => ({ id, name, kind, requires, when_files })), sandbox: rt.platform.sandbox.driver })),
   );
 
   // A language's test command runs on this machine when no sandbox is set up.
@@ -379,7 +393,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
     const b = body<{ project?: string; message?: string; model?: string; light?: boolean }>(req);
     if (!b.project || !b.message) bad("project and message are required");
     const project = findProject(b.project);
-    const model = b.model || (b.light && rt.platform.model.light) || rt.currentModel;
+    if (project.platform && project.platform !== rt.platform.name) throw new HttpError(409, "Use an Answer a question job for this remote project; live chat runs on this instance only");
+    const model = b.model || projectModel(project, rt.platform, rt.currentModel, b.light === true);
     const logs: string[] = [];
     const ctx = {
       config: rt.config,
@@ -489,12 +504,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<App> {
       const platforms = loadPlatforms();
       return Promise.all(
         platforms.map(async (p) => {
-          if (p.name === rt.platform.name) return { ...p, self: true, reachable: true, status: await rt.status() };
+          if (p.name === rt.platform.name) return { ...p, ...rememberHealth(p.name), self: true, reachable: true, status: await rt.status() };
           const peer = new PeerClient(p);
           try {
-            return { ...p, self: false, reachable: true, status: await peer.call("GET", "/api/status", undefined, 4000) };
+            const status = await peer.call("GET", "/api/status", undefined, 4000);
+            return { ...p, ...rememberHealth(p.name), self: false, reachable: true, status };
           } catch (e) {
-            return { ...p, self: false, reachable: false, error: (e as Error).message };
+            return { ...p, ...healthRecord(p.name), self: false, reachable: false, error: "API unavailable or authentication failed" };
           }
         }),
       );
