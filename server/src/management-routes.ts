@@ -12,7 +12,7 @@ import { resolvePlatform } from "./core/workflow-def.js";
 import { callHook, executeHook, ProjectSettings } from "./hooks.js";
 import { embeddingModel, estimateIndex, workload } from "./index/estimate.js";
 import { previewProject, removalPaths, removeProjectFiles, saveProject, validateProject } from "./project-management.js";
-import { tailscaleStatus, testSsh, validatePlatform } from "./platform-management.js";
+import { apiOrigin, tailscaleStatus, testSsh, validatePlatform } from "./platform-management.js";
 import type { Runtime } from "./runtime.js";
 import type { WorkflowEngine } from "./workflow/engine.js";
 import { PeerClient } from "./workflow/peers.js";
@@ -93,6 +93,17 @@ export function managementRoutes(app: FastifyInstance, rt: Runtime, engine: Work
     local(req); const p = client(()=>validatePlatform(req.body));
     if (loadPlatforms().some(x => x.name === p.name)) fail(409,"Platform already exists");
     writeFileAtomic(join(ws.platforms(),`${p.name}.toml`),toToml(p)); audit("user","platform.add",{platform:p.name}); return p;
+  });
+  // Before saving: does an OpenHelper answer at this address? /api/health needs no token, so none is sent.
+  app.post("/api/platforms/probe", async req => {
+    local(req);
+    const url = client(()=>apiOrigin(z.object({url:z.string()}).parse(req.body).url));
+    try {
+      const r = await fetch(`${url}/api/health`,{redirect:"error",signal:AbortSignal.timeout(4000)});
+      const h = await r.json() as {ok?:boolean;platform?:string;version?:string};
+      if (r.ok && h.ok) return {reachable:true,platform:h.platform ?? "",version:h.version ?? ""};
+    } catch { /* reported below */ }
+    return {reachable:false,message:`No OpenHelper API answered at ${url}. Check that it is running there, listening on its Tailscale address, and that the port is reachable on your tailnet. You can still save it and test again later.`};
   });
   app.put("/api/platforms/:id", async req => {
     local(req); const id = idOf(req); platform(id); const p = client(()=>validatePlatform(req.body));

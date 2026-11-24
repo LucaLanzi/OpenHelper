@@ -1,4 +1,6 @@
 import { cpSync, mkdirSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp, type App } from "../src/app.js";
@@ -97,6 +99,18 @@ describe("machine registry and hooks",()=>{
     expect((await request("POST","/api/platforms/remote/test")).json()).toMatchObject({reachable:false});
     expect((await request("POST","/api/platforms/desktop/test")).json()).toMatchObject({reachable:true,last_success:expect.any(String)});
     const detected=await request("POST","/api/platforms/desktop/capabilities");expect(detected.statusCode).toBe(200);expect(detected.json().hardware.cores).toBeGreaterThan(0);
+  });
+  it("probes a new address before saving, without sending a token",async()=>{
+    const seen:string[]=[];
+    const srv=createServer((req,res)=>{seen.push(String(req.headers.authorization ?? ""));res.setHeader("content-type","application/json");res.end(JSON.stringify({ok:true,platform:"workshop",version:"9.9.9"}));});
+    await new Promise<void>(r=>srv.listen(0,"127.0.0.1",()=>r()));const port=(srv.address() as AddressInfo).port;
+    try {
+      expect((await request("POST","/api/platforms/probe",{url:`http://127.0.0.1:${port}`})).json()).toEqual({reachable:true,platform:"workshop",version:"9.9.9"});
+      expect(seen).toEqual([""]);
+    } finally { srv.close(); }
+    expect((await request("POST","/api/platforms/probe",{url:`http://127.0.0.1:${port}`})).json()).toMatchObject({reachable:false,message:expect.stringContaining("You can still save it")});
+    expect((await request("POST","/api/platforms/probe",{url:"http://user:pw@host:8740"})).statusCode).toBe(400);
+    expect((await request("POST","/api/platforms/probe",{url:"http://127.0.0.1:1"},"100.64.0.2")).statusCode).toBe(403);
   });
   it("blocks platform removal when a project references it",async()=>{
     await request("POST","/api/platforms",remote());const b=configured();b.project.platform="remote";await request("POST","/api/projects/configure",b);

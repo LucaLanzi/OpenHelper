@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { get, nodePath, post, type LinksInfo, type ModelInfo, type PlatformInfo } from "../api";
 import { ErrorNote, PageHead, useLoad, useToast } from "../components/ui";
 import { useApp } from "../context";
+import { PlatformActions, PlatformEditor, TailscaleOnboarding, blankPlatform } from "../components/PlatformEditor";
 import { href } from "../router";
 
 export function Platforms() {
@@ -14,6 +15,7 @@ export function Platforms() {
     return () => window.clearInterval(t);
   }, [platforms.reload]);
 
+  const [editing,setEditing]=useState<PlatformInfo | null | undefined>(undefined);
   const ps = platforms.data ?? [];
   return (
     <>
@@ -22,9 +24,14 @@ export function Platforms() {
         intro="Each machine runs its own model. They only hand work to each other where a link allows it."
       />
       <ErrorNote error={platforms.error ?? links.error} />
+      <div className="stack" style={{marginBottom:20}}>
+      <TailscaleOnboarding onAdd={(url,host)=>setEditing({...blankPlatform(),url,connection:"tailscale",tailscale_hostname:host})}/>
+      {editing !== undefined ? <PlatformEditor key={editing?.name || "new"} platform={editing?.name ? editing : undefined} initial={editing ?? undefined} onCancel={()=>setEditing(undefined)} onSaved={()=>{setEditing(undefined);platforms.reload();}}/> : <button className="primary" onClick={()=>setEditing(null)}>Add platform</button>}
+      <p className="small">Links permit direction and set hop, token, and time budgets. The kill switch stops cross-platform agent messages. Dashboard health and administrative controls remain available. Each platform must also allow the agent role and hook. Changes are recorded in the Audit log.</p>
+      </div>
       <div className="line" aria-label="Machines and the links between them">
         {ps.map((p, i) => (
-          <MachineAndWire key={p.name} p={p} next={ps[i + 1]} links={links.data} self={self} onChange={platforms.reload} />
+          <MachineAndWire key={p.name} p={p} next={ps[i + 1]} links={links.data} self={self} onChange={platforms.reload} onEdit={()=>setEditing(p)} />
         ))}
       </div>
       {links.data?.kill_switch && (
@@ -36,10 +43,10 @@ export function Platforms() {
   );
 }
 
-function MachineAndWire({ p, next, links, self, onChange }: { p: PlatformInfo; next?: PlatformInfo; links?: LinksInfo; self: string; onChange: () => void }) {
+function MachineAndWire({ p, next, links, self, onChange, onEdit }: { p: PlatformInfo; next?: PlatformInfo; links?: LinksInfo; self: string; onChange: () => void; onEdit:()=>void }) {
   return (
     <>
-      <Machine p={p} self={self} onChange={onChange} />
+      <Machine p={p} self={self} onChange={onChange} onEdit={onEdit} />
       {next && <Wire a={p.name} b={next.name} links={links} />}
     </>
   );
@@ -96,7 +103,7 @@ function SandboxPower() {
   );
 }
 
-function Machine({ p, self, onChange }: { p: PlatformInfo; self: string; onChange: () => void }) {
+function Machine({ p, self, onChange, onEdit }: { p: PlatformInfo; self: string; onChange: () => void; onEdit:()=>void }) {
   const toast = useToast();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [choice, setChoice] = useState("");
@@ -139,13 +146,14 @@ function Machine({ p, self, onChange }: { p: PlatformInfo; self: string; onChang
   return (
     <section className={`machine${p.reachable ? "" : " offline"}`} aria-label={p.name}>
       <h3>
-        {p.name}
+        {p.display_name || p.name}
         {p.self && <span className="state">This machine</span>}
       </h3>
       <p className="small muted">{p.description}</p>
+      <PlatformActions p={p} onEdit={onEdit} onChange={onChange}/>
       {!p.reachable ? (
         <p style={{ marginTop: 12 }}>
-          Can't reach {p.name}. It may be asleep, off, or off the tailnet. Work for it waits; nothing is re-routed.
+          Can't reach {p.name}. It may be asleep, off, or off the tailnet. New requests fail visibly; check the remote job log for work already accepted. Nothing is re-routed.
         </p>
       ) : (
         <>

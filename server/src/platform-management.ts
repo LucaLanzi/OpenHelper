@@ -4,10 +4,16 @@ import { z } from "zod";
 import { Platform } from "./core/schemas.js";
 const exec = promisify(execFile);
 
+/** An OpenHelper API address: an HTTP(S) origin, nothing else. */
+export function apiOrigin(raw: string): string {
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new Error("Enter an address like http://my-machine.example.ts.net:8740"); }
+  if (!["http:","https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("API URL must be an HTTP(S) origin without credentials, path, or query");
+  return url.origin;
+}
 export function validatePlatform(input: unknown): Platform {
   const p = Platform.parse(input);
-  const url = new URL(p.url);
-  if (!["http:","https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("API URL must be an HTTP(S) origin without credentials, path, or query");
+  apiOrigin(p.url);
   if (p.auto_run && p.sandbox.driver === "none") throw new Error("Auto-run requires Docker, Podman, or Lima");
   for (const ref of [p.token_ref, p.ssh.auth_ref]) if (ref && !/^[A-Za-z0-9_-]{1,100}$/.test(ref)) throw new Error("Use a secret reference name, never a token or private key");
   for (const host of [p.tailscale_hostname,p.ssh.host]) if (host && !/^[A-Za-z0-9][A-Za-z0-9.:-]*$/.test(host)) throw new Error("Use a hostname or IP address without a command or URL");
